@@ -478,7 +478,20 @@ async function loadAll(){
     col_ref('one_off').get(),
     db.collection('users').doc(uid).collection('payments').doc('records').get()
   ]);
-  students=sSnap.docs.map(d=>({id:d.id,...d.data()}));
+  students=sSnap.docs.map(d=>{
+    const data=d.data();
+    // Normalise legacy field names (studentName→name, hourlyRate→rate)
+    if(!data.name&&data.studentName)data.name=data.studentName;
+    if(!data.rate&&data.hourlyRate)data.rate=data.hourlyRate;
+    // Normalise schedule: old format may have duration as top-level hours, slots without duration
+    if(data.schedule){
+      data.schedule=data.schedule.map(sl=>({
+        ...sl,
+        duration:sl.duration||(data.duration?data.duration*60:60)
+      }));
+    }
+    return{id:d.id,...data};
+  });
   attendance={};
   aSnap.docs.forEach(d=>attendance[d.id]=d.data());
   oneOffs=oSnap.docs.map(d=>({id:d.id,...d.data()}));
@@ -590,7 +603,7 @@ let _filterVal='';
 function filterStudents(v){_filterVal=v.toLowerCase();renderStudents();}
 function renderStudents(){
   const list=document.getElementById('student-list');
-  const filtered=students.filter(s=>!_filterVal||s.name.toLowerCase().includes(_filterVal)||(s.subject||'').toLowerCase().includes(_filterVal));
+  const filtered=students.filter(s=>!_filterVal||(s.name||'').toLowerCase().includes(_filterVal)||(s.subject||'').toLowerCase().includes(_filterVal));
   if(!filtered.length){list.innerHTML='<div style="text-align:center;color:#999;padding:30px">No students found</div>';return;}
   list.innerHTML=filtered.map(s=>`
     <div class="student-card">
