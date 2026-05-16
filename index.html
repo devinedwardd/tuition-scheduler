@@ -157,6 +157,22 @@ label{display:block;font-size:13px;font-weight:500;color:#555;margin-bottom:4px}
   .cal-lesson{font-size:9px}
   .payment-row{flex-direction:column;align-items:flex-start}
 }
+/* Week time-grid */
+.week-tgrid{display:flex;overflow-x:auto;border:1px solid #e0e0e0;border-radius:8px;background:#fff}
+.week-tgrid-times{min-width:42px;padding-top:49px;border-right:1px solid #e0e0e0;flex-shrink:0}
+.week-tgrid-hour-label{font-size:10px;color:#aaa;text-align:right;padding-right:5px;box-sizing:border-box}
+.week-tgrid-days{display:flex;flex:1;min-width:0}
+.week-tgrid-daycol{flex:1;min-width:72px;border-right:1px solid #f0f0f0;position:relative}
+.week-tgrid-daycol:last-child{border-right:none}
+.week-tgrid-dayhead{text-align:center;font-size:12px;font-weight:600;color:#555;padding:8px 4px;border-bottom:1px solid #e0e0e0;height:49px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:sticky;top:0;background:#fff;z-index:2}
+.week-tgrid-dayhead.today-head{color:#4a4a8a;background:#f0f0ff}
+.week-tgrid-body{position:relative}
+.week-tgrid-hrline{position:absolute;left:0;right:0;border-top:1px solid #f0f0f0}
+.week-tgrid-hrline.full-hr{border-top-color:#e0e0e0}
+.week-lesson-card{position:absolute;border-radius:4px;padding:2px 4px;font-size:11px;overflow:hidden;cursor:pointer;border-left:3px solid;line-height:1.3}
+.week-lesson-card.status-attended{opacity:1}
+.week-lesson-card.status-cancelled{opacity:0.45;text-decoration:line-through}
+.week-lesson-card.status-pending{opacity:0.75}
 /* Print invoice only */
 @media print{
   body>*{display:none}
@@ -245,13 +261,27 @@ label{display:block;font-size:13px;font-weight:500;color:#555;margin-bottom:4px}
 
   <!-- CALENDAR TAB -->
   <div class="tab" id="tab-calendar">
-    <div class="card">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-primary btn-sm" id="cal-view-month-btn" onclick="setCalView('month')">Month</button>
+      <button class="btn btn-secondary btn-sm" id="cal-view-week-btn" onclick="setCalView('week')">Week</button>
+    </div>
+    <div id="cal-month-section" class="card">
       <div class="cal-header">
         <button class="btn btn-secondary btn-sm" onclick="prevMonth()">&#8592;</button>
         <span id="cal-month-label" style="font-weight:700;font-size:17px;color:#4a4a8a"></span>
         <button class="btn btn-secondary btn-sm" onclick="nextMonth()">&#8594;</button>
       </div>
       <div class="cal-grid" id="cal-grid"></div>
+    </div>
+    <div id="cal-week-section" class="card" style="display:none">
+      <div class="cal-header" style="flex-wrap:wrap;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="prevWeekCal()">&#8592;</button>
+        <span id="week-cal-label" style="font-weight:700;font-size:15px;color:#4a4a8a"></span>
+        <button class="btn btn-secondary btn-sm" onclick="nextWeekCal()">&#8594;</button>
+        <button class="btn btn-secondary btn-sm" onclick="goToThisWeekCal()">This Week</button>
+      </div>
+      <p style="font-size:12px;color:#888;margin-bottom:8px">Tap a lesson to toggle attendance (green = attended, faded = cancelled, dim = not yet marked)</p>
+      <div id="week-time-grid"></div>
     </div>
   </div>
 
@@ -355,6 +385,12 @@ label{display:block;font-size:13px;font-weight:500;color:#555;margin-bottom:4px}
         <input type="number" id="s-rate" placeholder="e.g. 50" min="0" step="0.5">
       </div>
       <div class="form-group">
+        <label>Start Date</label>
+        <input type="date" id="s-startdate">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
         <label>Status</label>
         <select id="s-status">
           <option value="active">Active</option>
@@ -425,6 +461,8 @@ const db=firebase.firestore();
 let uid=null, students=[], attendance={}, oneOffs=[], paymentRecords={};
 let currentWeek=mondayOfWeek(new Date());
 let currentMonthView=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+let calView='month';
+let currentWeekCal=mondayOfWeek(new Date());
 let analyticsMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);
 let defaultRate=50, editingStudentId=null, payModalData=null;
 const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -494,7 +532,17 @@ async function loadAll(){
   });
   attendance={};
   aSnap.docs.forEach(d=>attendance[d.id]=d.data());
-  oneOffs=oSnap.docs.map(d=>({id:d.id,...d.data()}));
+  oneOffs=oSnap.docs.map(d=>{
+    const data=d.data();
+    const isLegacy=!!data.dateKey;
+    return{
+      id:d.id,...data,
+      date:data.date||data.dateKey||'',
+      studentId:String(data.studentId||''),
+      // Legacy duration was in hours (e.g. 1.5); new is in minutes (e.g. 90)
+      duration:isLegacy&&data.duration&&data.duration<10?Math.round(data.duration*60):data.duration||60,
+    };
+  });
   paymentRecords=pSnap.exists?(pSnap.data().records||{}):{};
 }
 
@@ -531,6 +579,7 @@ function openEditStudent(id){
   document.getElementById('s-name').value=s.name||'';
   document.getElementById('s-subject').value=s.subject||'';
   document.getElementById('s-rate').value=s.rate||'';
+  document.getElementById('s-startdate').value=s.startDate||'';
   document.getElementById('s-status').value=s.status||'active';
   document.getElementById('s-notes').value=s.notes||'';
   document.getElementById('schedule-slots').innerHTML='';
@@ -574,6 +623,7 @@ async function saveStudent(){
     name,
     subject:document.getElementById('s-subject').value.trim(),
     rate:parseFloat(document.getElementById('s-rate').value)||defaultRate,
+    startDate:document.getElementById('s-startdate').value||null,
     status:document.getElementById('s-status').value,
     notes:document.getElementById('s-notes').value.trim(),
     schedule:getScheduleSlots()
@@ -766,13 +816,126 @@ function renderCalendar(){
     const dk=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const isToday=dk===todayStr;
     const lessons=(lessonMap[dk]||[]);
-    const lessonHtml=lessons.map(l=>`<div class="cal-lesson overlap-${l._overlapClass}" title="${l.name} ${l.time}">${l.time} ${l.name.length>10?l.name.substring(0,10)+'…':l.name}</div>`).join('');
+    const lessonHtml=lessons.map(l=>{
+      const[lh,lm]=(l.time||'0:0').split(':').map(Number);
+      const endM=lh*60+lm+(l.duration||60);
+      const endStr=`${String(Math.floor(endM/60)).padStart(2,'0')}:${String(endM%60).padStart(2,'0')}`;
+      return `<div class="cal-lesson overlap-${l._overlapClass}" title="${l.name} ${l.time}–${endStr}">${l.time}–${endStr} ${l.name.length>8?l.name.substring(0,8)+'…':l.name}</div>`;
+    }).join('');
     html+=`<div class="cal-cell${isToday?' today':''}"><div class="cal-date">${d}</div>${lessonHtml}</div>`;
   }
   // End padding
   const endDay=lastDay.getDay()===0?0:7-lastDay.getDay();
   for(let p=0;p<endDay;p++)html+='<div class="cal-cell other-month"></div>';
   grid.innerHTML=html;
+}
+
+// ── Weekly time-grid view ─────────────────────────────────────
+function setCalView(v){
+  calView=v;
+  document.getElementById('cal-month-section').style.display=v==='month'?'':'none';
+  document.getElementById('cal-week-section').style.display=v==='week'?'':'none';
+  document.getElementById('cal-view-month-btn').className='btn btn-sm '+(v==='month'?'btn-primary':'btn-secondary');
+  document.getElementById('cal-view-week-btn').className='btn btn-sm '+(v==='week'?'btn-primary':'btn-secondary');
+  if(v==='month')renderCalendar();else renderWeekView();
+}
+function prevWeekCal(){currentWeekCal=new Date(currentWeekCal);currentWeekCal.setDate(currentWeekCal.getDate()-7);renderWeekView();}
+function nextWeekCal(){currentWeekCal=new Date(currentWeekCal);currentWeekCal.setDate(currentWeekCal.getDate()+7);renderWeekView();}
+function goToThisWeekCal(){currentWeekCal=mondayOfWeek(new Date());renderWeekView();}
+async function weekToggleAttendance(studentId,wk,dayIdx){
+  const key=`${studentId}_${wk}_${dayIdx}`;
+  const rec=attendance[key];
+  let newPresent;
+  if(!rec)newPresent=true;           // pending → attended
+  else if(rec.present)newPresent=false; // attended → cancelled
+  else{                              // cancelled → remove
+    delete attendance[key];
+    await col_ref('attendance').doc(key).delete();
+    renderWeekView();renderAttendance();return;
+  }
+  attendance[key]={present:newPresent,studentId,weekStart:wk,dayIndex:dayIdx};
+  await col_ref('attendance').doc(key).set(attendance[key]);
+  renderWeekView();renderAttendance();
+}
+function renderWeekView(){
+  const HOUR_H=56,SLOT_H=28; // px per hour / per 30min
+  const COLORS=['#e8eaf6','#fce4ec','#e8f5e9','#fff9c4','#e0f7fa','#fbe9e7','#f3e5f5'];
+  const DCOLORS=['#283593','#880e4f','#1b5e20','#f57f17','#006064','#bf360c','#4a148c'];
+  const days=[];
+  for(let i=0;i<7;i++){const d=new Date(currentWeekCal);d.setDate(d.getDate()+i);days.push(d);}
+  document.getElementById('week-cal-label').textContent=`${fmt(days[0])} – ${fmt(days[6])}`;
+  const todayStr=toLocalDateKey(new Date());
+  // Collect lessons per day
+  const dayLessons=days.map(d=>{
+    const dk=toLocalDateKey(d);
+    const lessons=[];
+    students.filter(s=>(s.status||'active')==='active').forEach((s,si)=>{
+      (s.schedule||[]).forEach(slot=>{
+        if(d.getDay()!==jsDay(slot.day))return;
+        if(s.startDate&&dk<s.startDate)return;
+        const mon=mondayOfWeek(new Date(d));
+        const wk=weekStartKey(mon);
+        const key=`${s.id}_${wk}_${slot.day}`;
+        const rec=attendance[key];
+        const status=rec?(rec.present?'attended':'cancelled'):'pending';
+        const[h,m]=(slot.time||'0:0').split(':').map(Number);
+        lessons.push({name:s.name,time:slot.time||'',startMins:h*60+m,duration:slot.duration||60,
+          si,status,studentId:s.id,wk,dayIdx:slot.day,
+          bg:COLORS[si%COLORS.length],fg:DCOLORS[si%DCOLORS.length]});
+      });
+    });
+    oneOffs.filter(o=>o.date===dk).forEach(o=>{
+      const s=students.find(x=>x.id===o.studentId);
+      const si=s?students.indexOf(s):0;
+      const[h,m]=(o.time||'0:0').split(':').map(Number);
+      lessons.push({name:s?s.name:'?',time:o.time||'',startMins:h*60+m,duration:o.duration||60,
+        si,status:'attended',studentId:null,
+        bg:COLORS[si%COLORS.length],fg:DCOLORS[si%DCOLORS.length]});
+    });
+    // Overlap detection
+    lessons.sort((a,b)=>a.startMins-b.startMins);
+    const colEnds=[];
+    lessons.forEach(l=>{let c=0;while(c<colEnds.length&&colEnds[c]>l.startMins)c++;colEnds[c]=l.startMins+l.duration;l._col=c;});
+    lessons.forEach(l=>{let mx=l._col;lessons.forEach(o=>{if(o===l)return;if(o.startMins<l.startMins+l.duration&&o.startMins+o.duration>l.startMins)mx=Math.max(mx,o._col);});l._tc=mx+1;});
+    return lessons;
+  });
+  // Time range
+  let minH=8,maxH=21;
+  dayLessons.forEach(ls=>ls.forEach(l=>{minH=Math.min(minH,Math.floor(l.startMins/60));maxH=Math.max(maxH,Math.ceil((l.startMins+l.duration)/60));}));
+  const gridH=(maxH-minH)*HOUR_H;
+  // Time labels
+  let timeHtml='<div class="week-tgrid-times">';
+  for(let h=minH;h<=maxH;h++)timeHtml+=`<div class="week-tgrid-hour-label" style="height:${HOUR_H}px">${String(h).padStart(2,'0')}:00</div>`;
+  timeHtml+='</div>';
+  // Day columns
+  const daysHtml=days.map((d,di)=>{
+    const dk=toLocalDateKey(d);
+    const isToday=dk===todayStr;
+    let lines='';
+    for(let h=minH;h<=maxH;h++){
+      lines+=`<div class="week-tgrid-hrline${h>minH?' full-hr':''}" style="top:${(h-minH)*HOUR_H}px"></div>`;
+      lines+=`<div class="week-tgrid-hrline" style="top:${(h-minH)*HOUR_H+SLOT_H}px;border-top-color:#f8f8f8"></div>`;
+    }
+    const cards=dayLessons[di].map(l=>{
+      const top=(l.startMins-minH*60)/60*HOUR_H;
+      const height=Math.max(l.duration/60*HOUR_H-3,18);
+      const cw=100/l._tc;
+      const endM=l.startMins+l.duration;
+      const endStr=`${String(Math.floor(endM/60)).padStart(2,'0')}:${String(endM%60).padStart(2,'0')}`;
+      const click=l.studentId?`onclick="weekToggleAttendance('${l.studentId}','${l.wk}',${l.dayIdx})"`:'' ;
+      return `<div class="week-lesson-card status-${l.status}" ${click}
+        style="top:${top}px;left:calc(${l._col*cw}% + 1px);width:calc(${cw}% - 3px);height:${height}px;background:${l.bg};color:${l.fg};border-color:${l.fg}"
+        title="${l.name} ${l.time}–${endStr}">
+        <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.name}</div>
+        ${height>26?`<div>${l.time}–${endStr}</div>`:''}
+      </div>`;
+    }).join('');
+    return `<div class="week-tgrid-daycol">
+      <div class="week-tgrid-dayhead${isToday?' today-head':''}">${DAYS[di]}<span style="font-size:15px">${d.getDate()}</span></div>
+      <div class="week-tgrid-body" style="height:${gridH}px">${lines}${cards}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('week-time-grid').innerHTML=`<div class="week-tgrid">${timeHtml}<div class="week-tgrid-days">${daysHtml}</div></div>`;
 }
 
 // ── Analytics ─────────────────────────────────────────────────
@@ -927,12 +1090,26 @@ function renderAnalytics(){
       warnHtml=`<div class="canc-warn">⚠️ Higher cancellations this month (${Math.round(mRate*100)}% vs ${Math.round(allRate*100)}% avg)</div>`;
     }
     const attPct=total>0?Math.round(present/total*100):0;
+    // One-off count this month
+    const mm=String(m+1).padStart(2,'0');
+    const oCount=oneOffs.filter(o=>o.studentId===s.id&&(o.date||'').startsWith(`${y}-${mm}`)).length;
+    // All-time totals
+    let atAll=0,absAll=0;
+    Object.keys(attendance).forEach(k=>{if(k.startsWith(s.id+'_')){const r=attendance[k];if(r.present)atAll++;else absAll++;}});
+    const allTotal=atAll+absAll;
+    // Schedule summary
+    const schedSummary=(s.schedule||[]).map(sl=>`${DAYS[sl.day]} ${sl.time} (${sl.duration||60}min)`).join(' · ');
     html+=`<div class="student-analytics-card">
-      <h4>${s.name}${s.subject?' — '+s.subject:''}</h4>
+      <h4 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
+        <span>${s.name}${s.subject?' — '+s.subject:''}</span>
+        <span style="font-size:12px;color:#888;font-weight:400">${schedSummary}</span>
+      </h4>
       <div class="mini-stats">
-        <div class="mini-stat"><strong>${present}/${total}</strong>Attended</div>
-        <div class="mini-stat"><strong>${attPct}%</strong>Rate</div>
+        <div class="mini-stat"><strong>${present}/${total}</strong>This month</div>
+        <div class="mini-stat"><strong>${attPct}%</strong>Att. rate</div>
         <div class="mini-stat"><strong>$${rev.toFixed(0)}</strong>Revenue</div>
+        ${oCount>0?`<div class="mini-stat"><strong>${oCount}</strong>One-offs</div>`:''}
+        ${allTotal>0?`<div class="mini-stat"><strong>${atAll}/${allTotal}</strong>All-time</div>`:''}
         ${allRate!==null?`<div class="mini-stat"><strong>${Math.round((1-allRate)*100)}%</strong>All-time att.</div>`:''}
       </div>
       <div class="progress-bar-wrap">
@@ -1200,7 +1377,7 @@ function switchTab(name){
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   document.getElementById('tab-btn-'+name).classList.add('active');
-  if(name==='calendar')renderCalendar();
+  if(name==='calendar'){if(calView==='week')renderWeekView();else renderCalendar();}
   if(name==='analytics')renderAnalytics();
   if(name==='payments'){populatePaymentsMonthSelect();renderPayments();}
   if(name==='settings'){
