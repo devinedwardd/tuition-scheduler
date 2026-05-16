@@ -164,8 +164,9 @@
     </div>
     <div class="revenue-stats-grid">
         <div class="student-card">
-            <div class="stat-label">Revenue to Date (This Month)</div>
+            <div class="stat-label" id="calRevLabel">Revenue to Date</div>
             <div class="stat-value" id="calendarRevenueToDate">$0.00</div>
+            <div style="font-size:10px;color:#bbb;margin-top:3px;" id="calRevNote"></div>
         </div>
         <div class="student-card">
             <div class="stat-label">Projected Monthly Revenue</div>
@@ -628,27 +629,30 @@ function renderCalendar() {
 
         let lessonsHtml = '';
         dayLessons.forEach(lesson => {
-            const [lh, lm] = lesson.time.split(':').map(Number);
-            const topPx = ((lh - START_HOUR) + lm / 60) * HOUR_PX;
-            const heightPx = Math.max(lesson.duration * HOUR_PX, 22);
-            const endTime = calcEndTime(lesson.time, lesson.duration);
-            let status, displaySubject, onclick;
+            let displayTime, displaySubject, status, onclick;
             if (lesson.isOneOff) {
-                status = lesson.oneOffStatus;
+                displayTime = lesson.time;
                 displaySubject = lesson.subject;
+                status = lesson.oneOffStatus;
                 onclick = `window.openOneOffEditModal('${lesson.oneOffId}')`;
             } else {
                 const key = `${lesson.studentId}_${weekStartKey}_${i}`;
                 status = attendanceRecords[key];
                 const ovr = sessionData[key];
                 displaySubject = (ovr && ovr.subject) ? ovr.subject : lesson.subject;
+                displayTime = (ovr && ovr.time) ? ovr.time : lesson.time;
                 onclick = `window.openLessonModal(${lesson.studentId},'${weekStartKey}',${i})`;
             }
+            const [lh, lmins] = displayTime.split(':').map(Number);
+            const hourOffset = lh === 0 ? 24 : lh;
+            const topPx = ((hourOffset - START_HOUR) + lmins / 60) * HOUR_PX;
+            const heightPx = Math.max(lesson.duration * HOUR_PX, 22);
+            const endTime = calcEndTime(displayTime, lesson.duration);
             const cls = status === 'attended' ? 'attended' : status === 'cancelled' ? 'cancelled' : '';
             const icon = status === 'attended' ? ' ✓' : status === 'cancelled' ? ' ✗' : '';
             const showEnd = heightPx >= 44;
             lessonsHtml += `<div class="tg-lesson ${cls}${lesson.isOneOff ? ' one-off' : ''}" style="top:${topPx}px;height:${heightPx}px;" onclick="${onclick}">
-                <div class="tg-lesson-time">${lesson.time}${showEnd ? '–'+endTime : ''}${icon}</div>
+                <div class="tg-lesson-time">${displayTime}${showEnd ? '–'+endTime : ''}${icon}</div>
                 <div style="font-size:10px;opacity:0.92;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lesson.studentName}</div>
                 ${heightPx >= 44 && displaySubject ? `<div style="font-size:9px;opacity:0.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displaySubject}</div>` : ''}
             </div>`;
@@ -681,21 +685,17 @@ function renderCalendar() {
 }
 
 function updateCalendarRevenueSummary() {
-    // Use the month of the week being viewed, not necessarily today
     const viewed = new Date(currentWeekStart);
     const year = viewed.getFullYear();
     const month = viewed.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const monthName = viewed.toLocaleString('default', { month: 'long' });
 
-    // Count how many times each JS day-of-week (0=Sun..6=Sat) appears this month
     const dayCount = [0,0,0,0,0,0,0];
     for (let d = 1; d <= daysInMonth; d++) {
         dayCount[new Date(year, month, d).getDay()]++;
     }
 
-    // Projected monthly: multiply each slot's revenue by actual occurrences in the month
-    // schedule day: 0=Mon..6=Sun → JS day: 1=Mon..0=Sun
     let projectedMonthly = 0;
     students.forEach(s => {
         s.schedule.forEach(slot => {
@@ -704,26 +704,46 @@ function updateCalendarRevenueSummary() {
         });
     });
 
-    // Revenue earned (attended sessions) so far this month
-    let revenueToDate = 0;
-    Object.entries(attendanceRecords).forEach(([key, status]) => {
-        if (status === 'attended') {
-            const parts = key.split('_');
-            const sid = parts[0], dateStr = parts[1], dayIdx = parts[2];
-            const wkStart = new Date(dateStr + 'T00:00:00');
-            const recordDate = new Date(wkStart);
-            recordDate.setDate(recordDate.getDate() + parseInt(dayIdx));
-            if (recordDate.getMonth() === month && recordDate.getFullYear() === year) {
-                const student = students.find(s => s.id === parseInt(sid));
-                if (student) {
-                    const schedule = student.schedule.find(sch => sch.day === parseInt(dayIdx));
-                    if (schedule) revenueToDate += student.duration * student.hourlyRate;
+    // Revenue to date: all past sessions in this month not explicitly cancelled
+    // (pending/unrecorded past sessions count as earned; only cancellations are excluded)
+    const today = new Date();
+    const todayYear = today.getFullYear(), todayMonth = today.getMonth(), todayDay = today.getDate();
+    let cutoffDay;
+    if (year < todayYear || (year === todayYear && month < todayMonth)) {
+        cutoffDay = daysInMonth;
+    } else if (year === todayYear && month === todayMonth) {
+        cutoffDay = todayDay;
+    } else {
+        cutoffDay = 0;
+    }
+
+    let revenueToDate = 0, sessionsDone = 0, cancelledCount = 0;
+    students.forEach(s => {
+        s.schedule.forEach(slot => {
+            const jsDay = slot.day === 6 ? 0 : slot.day + 1;
+            for (let d = 1; d <= cutoffDay; d++) {
+                if (new Date(year, month, d).getDay() !== jsDay) continue;
+                const wkStart = getMonday(new Date(year, month, d));
+                const wkKey = wkStart.toISOString().split('T')[0];
+                const status = attendanceRecords[`${s.id}_${wkKey}_${slot.day}`];
+                if (status === 'cancelled') {
+                    cancelledCount++;
+                } else {
+                    revenueToDate += s.duration * s.hourlyRate;
+                    sessionsDone++;
                 }
             }
-        }
+        });
     });
 
     const percent = projectedMonthly > 0 ? Math.round((revenueToDate / projectedMonthly) * 100) : 0;
+
+    const labelEl = document.getElementById('calRevLabel');
+    if (labelEl) labelEl.textContent = `${monthName} Revenue to Date`;
+    const noteEl = document.getElementById('calRevNote');
+    if (noteEl) noteEl.textContent = sessionsDone > 0
+        ? `${sessionsDone} session${sessionsDone > 1 ? 's' : ''}${cancelledCount ? ` · ${cancelledCount} cancelled` : ''}`
+        : cutoffDay > 0 ? 'No sessions yet' : '';
 
     document.getElementById('calendarRevenueToDate').textContent = `$${revenueToDate.toFixed(2)}`;
     document.getElementById('calendarProjectedMonthly').textContent = `$${projectedMonthly.toFixed(2)}`;
@@ -763,7 +783,7 @@ window.nextWeek = function() {
 // ── LESSON DETAIL MODAL ────────────────────────────────────────────────────
 let _lm = {};
 
-function buildLessonBody({ meta, status, subject, note, saveFunc, cancelFunc, deleteFunc }) {
+function buildLessonBody({ meta, status, subject, note, time, saveFunc, cancelFunc, deleteFunc }) {
     const ab = (id, label, active, color) =>
         `<button id="${id}" class="lm-att-btn" onclick="window.setLmStatus(${id==='lmbtn_pending'?'null':`'${id.replace('lmbtn_','')}'`})" style="background:${active?color:'#e8e8e8'};color:${active?'white':'#555'};">${label}</button>`;
     return `
@@ -775,6 +795,10 @@ function buildLessonBody({ meta, status, subject, note, saveFunc, cancelFunc, de
                 ${ab('lmbtn_attended','✓ Attended',status==='attended','#388e3c')}
                 ${ab('lmbtn_cancelled','✗ Cancelled',status==='cancelled','#c62828')}
             </div>
+        </div>
+        <div class="form-group">
+            <label>Time <span style="font-size:11px;color:#aaa;font-weight:400;">(this session only)</span></label>
+            <select id="lm_time">${TIMES.map(t=>`<option value="${t}"${t===time?' selected':''}>${t}</option>`).join('')}</select>
         </div>
         <div class="form-group">
             <label>Subject <span style="font-size:11px;color:#aaa;font-weight:400;">(this session only)</span></label>
@@ -801,15 +825,16 @@ window.openLessonModal = function(studentId, weekStartKey, dayIndex) {
     const sd = sessionData[key] || {};
     const subject = sd.subject || slot.subject || student.subject;
     const note = sd.note || '';
-    const endTime = calcEndTime(slot.time, student.duration);
+    const sessionTime = (sd.time) ? sd.time : slot.time;
+    const endTime = calcEndTime(sessionTime, student.duration);
     const lessonDate = new Date(weekStartKey + 'T00:00:00');
     lessonDate.setDate(lessonDate.getDate() + dayIndex);
     const dateStr = lessonDate.toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-    _lm = { type: 'recurring', key, status };
+    _lm = { type: 'recurring', key, status, slotTime: slot.time };
     document.getElementById('lm_title').textContent = student.studentName;
     document.getElementById('lm_body').innerHTML = buildLessonBody({
-        meta: `${dateStr} · ${slot.time}–${endTime} · $${(student.duration * student.hourlyRate).toFixed(2)}`,
-        status, subject, note,
+        meta: `${dateStr} · ${sessionTime}–${endTime} · $${(student.duration * student.hourlyRate).toFixed(2)}`,
+        status, subject, note, time: sessionTime,
         saveFunc: 'window.saveLessonModal()',
         cancelFunc: 'window.closeLessonModal()'
     });
@@ -828,11 +853,17 @@ window.setLmStatus = function(status) {
 window.saveLessonModal = async function() {
     const subject = document.getElementById('lm_subject').value.trim();
     const note = document.getElementById('lm_note').value.trim();
-    const { key, status } = _lm;
+    const time = document.getElementById('lm_time').value;
+    const { key, status, slotTime } = _lm;
     const updAtt = { ...attendanceRecords };
     if (!status) delete updAtt[key]; else updAtt[key] = status;
     const updSd = { ...sessionData };
-    if (subject || note) updSd[key] = { subject, note }; else delete updSd[key];
+    const timeChanged = time !== slotTime;
+    if (subject || note || timeChanged) {
+        updSd[key] = { subject, note, ...(timeChanged ? { time } : {}) };
+    } else {
+        delete updSd[key];
+    }
     try {
         await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').set({ records: updAtt });
         await db.collection('users').doc(currentUser.uid).collection('session_data').doc('overrides').set({ data: updSd });
@@ -929,7 +960,7 @@ window.openOneOffEditModal = function(id) {
     document.getElementById('lm_title').textContent = lesson.studentName + ' ★';
     document.getElementById('lm_body').innerHTML = buildLessonBody({
         meta: `${dateStr} · ${lesson.time}–${endTime} · $${(lesson.duration * lesson.hourlyRate).toFixed(2)} · one-off`,
-        status: lesson.status, subject: lesson.subject, note: lesson.note || '',
+        status: lesson.status, subject: lesson.subject, note: lesson.note || '', time: lesson.time,
         saveFunc: 'window.saveOneOffEdit()',
         cancelFunc: 'window.closeLessonModal()',
         deleteFunc: `window.deleteOneOff('${id}')`
@@ -940,8 +971,9 @@ window.openOneOffEditModal = function(id) {
 window.saveOneOffEdit = async function() {
     const subject = document.getElementById('lm_subject').value.trim();
     const note = document.getElementById('lm_note').value.trim();
+    const time = document.getElementById('lm_time').value;
     const { id, status } = _lm;
-    const updated = { ...oneOffLessons, [id]: { ...oneOffLessons[id], status, subject, note } };
+    const updated = { ...oneOffLessons, [id]: { ...oneOffLessons[id], status, subject, note, time } };
     try {
         await db.collection('users').doc(currentUser.uid).collection('one_off').doc('lessons').set({ lessons: updated });
         window.closeLessonModal();
