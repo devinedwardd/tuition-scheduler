@@ -4,270 +4,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weekly Tuition Scheduler</title>
+    <title>Tuition Scheduler</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f5f5f5;
-            color: #333;
-            padding: 16px;
-        }
-
-```
-    .container { max-width: 1000px; margin: 0 auto; }
-    h1 { font-size: 28px; margin-bottom: 24px; color: #222; }
-    h2 { font-size: 18px; margin: 20px 0 12px; color: #333; }
-
-    .tabs {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 24px;
-        border-bottom: 2px solid #e0e0e0;
-        flex-wrap: wrap;
-    }
-    .tab-btn {
-        padding: 12px 16px;
-        background: none;
-        border: none;
-        border-bottom: 3px solid transparent;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        color: #666;
-        transition: all 0.3s;
-    }
-    .tab-btn.active { color: #1976d2; border-bottom-color: #1976d2; }
-
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-
-    .form-group { margin-bottom: 16px; }
-    label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; color: #333; }
-    input, select, textarea {
-        width: 100%;
-        padding: 10px 12px;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        font-size: 14px;
-        font-family: inherit;
-    }
-    input:focus, select:focus { outline: none; border-color: #1976d2; box-shadow: 0 0 0 2px rgba(25,118,210,0.1); }
-
-    button {
-        background: #1976d2;
-        color: white;
-        border: none;
-        padding: 12px 20px;
-        border-radius: 6px;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background 0.3s;
-    }
-    button:hover { background: #1565c0; }
-    button.secondary { background: #e0e0e0; color: #333; }
-    button.secondary:hover { background: #d0d0d0; }
-    button.success-btn { background: #388e3c; }
-    button.success-btn:hover { background: #2e7d32; }
-    button.danger-btn { background: #ffcdd2; color: #b71c1c; }
-    button.danger-btn:hover { background: #ef9a9a; }
-
-    .student-card {
-        background: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 16px;
-    }
-
-    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
-
-    .lesson-slots {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 12px;
-        margin-bottom: 16px;
-    }
-    .lesson-slot {
-        background: #e3f2fd;
-        border: 1px solid #bbdefb;
-        border-radius: 6px;
-        padding: 12px;
-        text-align: center;
-    }
-    .lesson-slot-time { font-weight: 600; font-size: 16px; color: #1565c0; margin-bottom: 4px; }
-    .lesson-slot-day { font-size: 12px; color: #666; margin-bottom: 8px; }
-
-    .stat-card { background: #f5f5f5; border-radius: 6px; padding: 12px; }
-    .stat-label { font-size: 12px; color: #999; margin-bottom: 4px; }
-    .stat-value { font-size: 18px; font-weight: 600; color: #1976d2; }
-
-    .revenue-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
-
-    .week-nav {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
-        gap: 12px;
-    }
-    .week-info { text-align: center; font-size: 14px; color: #666; flex: 1; }
-
-    .calendar-hint { font-size: 12px; color: #999; text-align: center; margin-bottom: 16px; }
-
-    .tg-scroll { overflow-x: auto; overflow-y: auto; max-height: 80vh; border: 1px solid #e0e0e0; border-radius: 8px; background: white; }
-    .tg-wrap { display: flex; min-width: 600px; }
-    .tg-labels { width: 50px; flex-shrink: 0; border-right: 1px solid #e0e0e0; position: sticky; left: 0; background: white; z-index: 3; }
-    .tg-label-header { height: 48px; border-bottom: 1px solid #e0e0e0; background: #f5f5f5; }
-    .tg-label {
-        height: 60px; display: flex; align-items: flex-start;
-        justify-content: flex-end; padding: 3px 6px 0 0;
-        font-size: 10px; color: #bbb; border-bottom: 1px solid #f0f0f0;
-    }
-    .tg-days { display: flex; flex: 1; }
-    .tg-day { flex: 1; min-width: 80px; border-right: 1px solid #e0e0e0; }
-    .tg-day:last-child { border-right: none; }
-    .tg-day-header {
-        height: 48px; display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
-        background: #f5f5f5; border-bottom: 1px solid #e0e0e0;
-        position: sticky; top: 0; z-index: 2;
-    }
-    .tg-day.tg-today .tg-day-header { background: #bbdefb; }
-    .tg-day.tg-today .tg-day-num { color: #1565c0; font-weight: 700; }
-    .tg-day-num { font-size: 16px; font-weight: 600; color: #333; line-height: 1; }
-    .tg-day-name { font-size: 10px; color: #999; margin-top: 2px; }
-    .tg-day-body { position: relative; }
-    .tg-hour-line { position: absolute; left: 0; right: 0; border-top: 1px solid #ebebeb; pointer-events: none; }
-    .tg-half-line { position: absolute; left: 0; right: 0; border-top: 1px dashed #f5f5f5; pointer-events: none; }
-    .tg-lesson {
-        position: absolute; left: 2px; right: 2px;
-        background: linear-gradient(135deg, #1976d2, #1565c0);
-        color: white; border-radius: 4px; padding: 3px 5px;
-        font-size: 10px; cursor: pointer; overflow: hidden; z-index: 1;
-        transition: filter 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
-    .tg-lesson:hover { filter: brightness(1.12); }
-    .tg-lesson.attended { background: linear-gradient(135deg, #388e3c, #2e7d32); }
-    .tg-lesson.cancelled { background: linear-gradient(135deg, #c62828, #b71c1c); opacity: 0.75; }
-    .tg-lesson-time { font-weight: 700; font-size: 10px; white-space: nowrap; }
-    .tg-lesson-name { font-size: 10px; opacity: 0.92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-    .modal {
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.5);
-        z-index: 1000;
-        align-items: center;
-        justify-content: center;
-        padding: 16px;
-    }
-    .modal.active { display: flex; }
-    .modal-content {
-        background: white;
-        border-radius: 12px;
-        padding: 24px;
-        max-width: 500px;
-        width: 100%;
-        max-height: 90vh;
-        overflow-y: auto;
-    }
-    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .modal-header h2 { margin: 0; font-size: 20px; }
-    .modal-close {
-        background: none; border: none; font-size: 24px; cursor: pointer;
-        padding: 0; width: 30px; height: 30px;
-        display: flex; align-items: center; justify-content: center; color: #999;
-    }
-
-    .login-screen {
-        position: fixed;
-        inset: 0;
-        background: linear-gradient(135deg, #e3f2fd 0%, #f5f5f5 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-    }
-    .login-card {
-        background: white;
-        border-radius: 20px;
-        padding: 48px 40px;
-        text-align: center;
-        max-width: 380px;
-        width: 100%;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-    }
-    .google-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        background: white;
-        color: #333;
-        border: 2px solid #e0e0e0;
-        padding: 14px 24px;
-        border-radius: 10px;
-        font-size: 15px;
-        font-weight: 500;
-        width: 100%;
-        cursor: pointer;
-        transition: box-shadow 0.2s;
-    }
-    .google-btn:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.15); border-color: #bbb; }
-
-    .user-profile {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        background: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 12px;
-        padding: 16px 20px;
-        margin-bottom: 20px;
-    }
-    .user-avatar {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: #1976d2;
-        color: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 20px;
-        font-weight: 600;
-        flex-shrink: 0;
-    }
-    .user-info { flex: 1; }
-    .user-name { font-weight: 600; font-size: 15px; }
-    .user-email-text { font-size: 13px; color: #999; margin-top: 2px; }
-
-    .empty-state { text-align: center; padding: 40px 20px; color: #999; }
-    .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
-
-    .success-msg {
-        background: #c8e6c9; color: #2e7d32;
-        padding: 12px; border-radius: 6px; margin-bottom: 16px; display: none;
-    }
-</style>
-```
-
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; padding: 16px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { font-size: 28px; margin-bottom: 24px; color: #222; }
+        h2 { font-size: 18px; margin: 20px 0 12px; color: #333; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 2px solid #e0e0e0; flex-wrap: wrap; }
+        .tab-btn { padding: 12px 16px; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 14px; font-weight: 500; color: #666; transition: all 0.3s; }
+        .tab-btn.active { color: #1976d2; border-bottom-color: #1976d2; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; color: #333; }
+        input, select, textarea { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        input:focus, select:focus { outline: none; border-color: #1976d2; box-shadow: 0 0 0 2px rgba(25,118,210,0.1); }
+        button { background: #1976d2; color: white; border: none; padding: 12px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.3s; }
+        button:hover { background: #1565c0; }
+        button.secondary { background: #e0e0e0; color: #333; }
+        button.secondary:hover { background: #d0d0d0; }
+        .student-card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+        @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
+        .lesson-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .lesson-slot { background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 6px; padding: 12px; text-align: center; }
+        .lesson-slot-time { font-weight: 600; font-size: 16px; color: #1565c0; margin-bottom: 4px; }
+        .lesson-slot-day { font-size: 12px; color: #666; margin-bottom: 8px; }
+        .stat-card { background: #f5f5f5; border-radius: 6px; padding: 12px; }
+        .stat-label { font-size: 12px; color: #999; margin-bottom: 4px; }
+        .stat-value { font-size: 18px; font-weight: 600; color: #1976d2; }
+        .revenue-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .week-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; }
+        .week-info { text-align: center; font-size: 14px; color: #666; flex: 1; }
+        .tg-scroll { overflow-x: auto; overflow-y: auto; max-height: 80vh; border: 1px solid #e0e0e0; border-radius: 8px; background: white; }
+        .tg-wrap { display: flex; min-width: 600px; }
+        .tg-labels { width: 50px; flex-shrink: 0; border-right: 1px solid #e0e0e0; position: sticky; left: 0; background: white; z-index: 3; }
+        .tg-label-header { height: 48px; border-bottom: 1px solid #e0e0e0; background: #f5f5f5; }
+        .tg-label { height: 60px; display: flex; align-items: flex-start; justify-content: flex-end; padding: 3px 6px 0 0; font-size: 10px; color: #bbb; border-bottom: 1px solid #f0f0f0; }
+        .tg-days { display: flex; flex: 1; }
+        .tg-day { flex: 1; min-width: 80px; border-right: 1px solid #e0e0e0; }
+        .tg-day:last-child { border-right: none; }
+        .tg-day-header { height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f5f5f5; border-bottom: 1px solid #e0e0e0; position: sticky; top: 0; z-index: 2; }
+        .tg-day.tg-today .tg-day-header { background: #bbdefb; }
+        .tg-day.tg-today .tg-day-num { color: #1565c0; font-weight: 700; }
+        .tg-day-num { font-size: 16px; font-weight: 600; color: #333; line-height: 1; }
+        .tg-day-name { font-size: 10px; color: #999; margin-top: 2px; }
+        .tg-day-body { position: relative; }
+        .tg-hour-line { position: absolute; left: 0; right: 0; border-top: 1px solid #ebebeb; pointer-events: none; }
+        .tg-lesson { position: absolute; left: 2px; right: 2px; background: linear-gradient(135deg, #1976d2, #1565c0); color: white; border-radius: 4px; padding: 3px 5px; font-size: 10px; cursor: pointer; overflow: hidden; z-index: 1; transition: filter 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .tg-lesson:hover { filter: brightness(1.12); }
+        .tg-lesson.attended { background: linear-gradient(135deg, #388e3c, #2e7d32); }
+        .tg-lesson.cancelled { background: linear-gradient(135deg, #c62828, #b71c1c); opacity: 0.75; }
+        .tg-lesson-time { font-weight: 700; font-size: 10px; white-space: nowrap; }
+        .login-screen { position: fixed; inset: 0; background: linear-gradient(135deg, #e3f2fd 0%, #f5f5f5 100%); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+        .login-card { background: white; border-radius: 20px; padding: 48px 40px; text-align: center; max-width: 380px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+        .google-btn { display: flex; align-items: center; justify-content: center; gap: 12px; background: white; color: #333; border: 2px solid #e0e0e0; padding: 14px 24px; border-radius: 10px; font-size: 15px; font-weight: 500; width: 100%; cursor: pointer; transition: box-shadow 0.2s; }
+        .google-btn:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+        .user-profile { display: flex; align-items: center; gap: 16px; background: white; border: 1px solid #e0e0e0; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; }
+        .user-avatar { width: 48px; height: 48px; border-radius: 50%; background: #1976d2; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 600; flex-shrink: 0; }
+        .user-info { flex: 1; }
+        .user-name { font-weight: 600; font-size: 15px; }
+        .user-email-text { font-size: 13px; color: #999; margin-top: 2px; }
+        .empty-state { text-align: center; padding: 40px 20px; color: #999; }
+        .success-msg { background: #c8e6c9; color: #2e7d32; padding: 12px; border-radius: 6px; margin-bottom: 16px; display: none; }
+    </style>
 </head>
 <body>
-
-<!-- LOGIN SCREEN -->
 
 <div class="login-screen" id="loginScreen">
     <div class="login-card">
         <div style="font-size: 52px; margin-bottom: 16px;">📚</div>
         <h1 style="font-size: 24px; color: #222; margin-bottom: 8px;">Tuition Scheduler</h1>
-        <p style="color: #999; font-size: 14px; margin-bottom: 32px; line-height: 1.5;">Sign in to sync your schedule across PC, iPhone, and iPad</p>
-        <button class="google-btn" onclick="signInWithGoogle()">
+        <p style="color: #999; font-size: 14px; margin-bottom: 32px;">Sign in to sync your schedule</p>
+        <button class="google-btn" onclick="window.signInWithGoogle()">
             <svg width="20" height="20" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -279,63 +90,53 @@
     </div>
 </div>
 
-<!-- APP -->
-
 <div class="container" id="appContainer" style="display:none;">
-    <h1>📚 Weekly Tuition Scheduler</h1>
+    <h1>📚 Tuition Scheduler</h1>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="window.switchTab('students')">My Students</button>
+        <button class="tab-btn" onclick="window.switchTab('calendar')">Calendar</button>
+        <button class="tab-btn" onclick="window.switchTab('analytics')">Analytics</button>
+        <button class="tab-btn" onclick="window.switchTab('settings')">Settings</button>
+    </div>
 
 ```
-<div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('students', event)">My Students</button>
-    <button class="tab-btn" onclick="switchTab('calendar', event)">Weekly Calendar</button>
-    <button class="tab-btn" onclick="switchTab('analytics', event)">Analytics</button>
-    <button class="tab-btn" onclick="switchTab('settings', event)">Settings</button>
-</div>
-
-<!-- STUDENTS TAB -->
 <div id="students" class="tab-content active">
     <div class="success-msg" id="successMsg"></div>
     <h2>Add New Student</h2>
     <div class="grid-2">
         <div class="form-group">
             <label>Student Name</label>
-            <input type="text" id="studentName" placeholder="e.g., John Doe">
+            <input type="text" id="studentName">
         </div>
         <div class="form-group">
             <label>Subject</label>
-            <input type="text" id="subject" placeholder="e.g., Math">
+            <input type="text" id="subject">
         </div>
     </div>
     <div class="grid-2">
         <div class="form-group">
             <label>Hourly Rate ($)</label>
-            <input type="number" id="hourlyRate" value="50" min="0" step="5">
+            <input type="number" id="hourlyRate" value="50">
         </div>
         <div class="form-group">
-            <label>Duration per Session (hours)</label>
-            <input type="number" id="duration" value="1" min="0.5" step="0.5">
+            <label>Duration (hours)</label>
+            <input type="number" id="duration" value="1" step="0.5">
         </div>
-    </div>
-    <div class="form-group">
-        <label>Notes (optional)</label>
-        <textarea id="notes" rows="2" placeholder="Any additional notes..."></textarea>
     </div>
     <h2 style="margin-top: 28px;">Select Weekly Schedule</h2>
     <div id="scheduleSelector"></div>
-    <button onclick="addStudent()" style="margin-top: 20px;">Add Student with Schedule</button>
+    <button onclick="window.addStudent()" style="margin-top: 20px;">Add Student</button>
     <h2 style="margin-top: 32px;">My Students</h2>
     <div id="studentsList"></div>
 </div>
 
-<!-- CALENDAR TAB -->
 <div id="calendar" class="tab-content">
     <div class="week-nav">
-        <button class="secondary" onclick="previousWeek()">← Previous</button>
-        <div class="week-info"><span id="weekDisplay">Loading...</span></div>
-        <button class="secondary" onclick="nextWeek()">Next →</button>
+        <button class="secondary" onclick="window.previousWeek()">← Previous</button>
+        <div class="week-info" id="weekDisplay">Loading...</div>
+        <button class="secondary" onclick="window.nextWeek()">Next →</button>
     </div>
-    
-    <div class="revenue-stats-grid" style="margin-bottom: 20px;">
+    <div class="revenue-stats-grid">
         <div class="student-card">
             <div class="stat-label">Revenue to Date (This Month)</div>
             <div class="stat-value" id="calendarRevenueToDate">$0.00</div>
@@ -349,18 +150,15 @@
             <div class="stat-value" id="calendarRevenuePercent">0%</div>
         </div>
     </div>
-    
-    <p class="calendar-hint">Click a lesson to mark: <strong style="color:#1976d2">Blue</strong> = Pending · <strong style="color:#388e3c">Green</strong> = Attended · <strong style="color:#c62828">Red</strong> = Cancelled</p>
+    <p style="font-size: 12px; color: #999; text-align: center; margin-bottom: 16px;">Click lesson to mark: <strong style="color:#1976d2">Blue</strong> = Pending · <strong style="color:#388e3c">Green</strong> = Attended · <strong style="color:#c62828">Red</strong> = Cancelled</p>
     <div id="calendarGrid"></div>
 </div>
 
-<!-- ANALYTICS TAB -->
 <div id="analytics" class="tab-content">
     <h2>Revenue Analytics</h2>
     <div id="analyticsList"></div>
 </div>
 
-<!-- SETTINGS TAB -->
 <div id="settings" class="tab-content">
     <h2>Account</h2>
     <div class="user-profile">
@@ -369,27 +167,12 @@
             <div class="user-name" id="userDisplayName">—</div>
             <div class="user-email-text" id="userEmailText">—</div>
         </div>
-        <button class="secondary" onclick="signOutUser()" style="padding: 8px 14px; font-size: 13px;">Sign Out</button>
+        <button class="secondary" onclick="window.signOutUser()">Sign Out</button>
     </div>
-
-    <h2>Export</h2>
-    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
-        <button class="success-btn" onclick="exportToExcel()">📊 Export Sessions (Excel)</button>
-        <button onclick="exportData()">📥 Backup Data (JSON)</button>
-    </div>
-
-    <h2 style="margin-top: 32px;">Import</h2>
-    <button class="secondary" onclick="document.getElementById('importFile').click()">📤 Restore from JSON</button>
-    <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importData(event)">
-
-    <h2 style="margin-top: 32px;">Danger Zone</h2>
-    <button class="danger-btn" onclick="clearAllData()">🗑️ Delete All My Data</button>
 </div>
 ```
 
 </div>
-
-<!-- Firebase Scripts -->
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
 
@@ -398,446 +181,359 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"></script>
 
 <script>
-    // State
-    let currentUser = null;
-    let students = [];
-    let attendanceRecords = {};
-    let currentWeekStart = getMonday(new Date());
+console.log('Script starting...');
 
-    const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const TIMES = ['08:00','08:15','08:30','08:45','09:00','09:15','09:30','09:45','10:00','10:15','10:30','10:45','11:00','11:15','11:30','11:45','12:00','12:15','12:30','12:45','13:00','13:15','13:30','13:45','14:00','14:15','14:30','14:45','15:00','15:15','15:30','15:45','16:00','16:15','16:30','16:45','17:00','17:15','17:30','17:45','18:00','18:15','18:30','18:45','19:00','19:15','19:30','19:45','20:00','20:15','20:30','20:45','21:00'];
+// FIREBASE CONFIG
+const firebaseConfig = {
+    apiKey: "AIzaSyCcU_6u-zNERCr5PTkau8O1TeoJcZNdo0E",
+    authDomain: "tuition-scheduler-672d3.firebaseapp.com",
+    projectId: "tuition-scheduler-672d3",
+    storageBucket: "tuition-scheduler-672d3.firebasestorage.app",
+    messagingSenderId: "190294013358",
+    appId: "1:190294013308:web:1c962d251c8bf3a82d843f"
+};
 
-    // Firebase
-    const firebaseConfig = {
-        apiKey: "AIzaSyCcU_6u-zNERCr5PTkau8O1TeoJcZNdo0E",
-        authDomain: "tuition-scheduler-672d3.firebaseapp.com",
-        projectId: "tuition-scheduler-672d3",
-        storageBucket: "tuition-scheduler-672d3.firebasestorage.app",
-        messagingSenderId: "190294013358",
-        appId: "1:190294013308:web:1c962d251c8bf3a82d843f"
-    };
-
+try {
     firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-    const provider = new firebase.auth.GoogleAuthProvider();
+    console.log('Firebase initialized');
+} catch(e) {
+    console.error('Firebase error:', e);
+}
 
-    // Auth
-    function signInWithGoogle() {
-        auth.signInWithPopup(provider).catch(e => {
-            console.error('Error:', e);
-            alert('Sign-in failed: ' + e.message);
-        });
-    }
+const auth = firebase.auth();
+const db = firebase.firestore();
+const provider = new firebase.auth.GoogleAuthProvider();
 
-    function signOutUser() {
-        if (!confirm('Sign out?')) return;
+// STATE
+let currentUser = null;
+let students = [];
+let attendanceRecords = {};
+let currentWeekStart = getMonday(new Date());
+
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const TIMES = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'];
+
+// FUNCTIONS
+function getMonday(d) {
+    d = new Date(d);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+}
+
+window.signInWithGoogle = function() {
+    console.log('Signing in...');
+    auth.signInWithPopup(provider).catch(e => {
+        console.error('Auth error:', e);
+        alert('Error: ' + e.message);
+    });
+};
+
+window.signOutUser = function() {
+    if (confirm('Sign out?')) {
         auth.signOut();
     }
+};
 
-    auth.onAuthStateChanged(user => {
-        if (user) {
-            currentUser = user;
-            document.getElementById('loginScreen').style.display = 'none';
-            document.getElementById('appContainer').style.display = 'block';
-            document.getElementById('userDisplayName').textContent = user.displayName || user.email;
-            document.getElementById('userEmailText').textContent = user.email;
-            const initial = (user.displayName || user.email || '?')[0].toUpperCase();
-            document.getElementById('userAvatar').textContent = initial;
-            setupListeners(user.uid);
-            renderScheduleSelector();
-            renderCalendar();
-        } else {
-            currentUser = null;
-            students = [];
-            attendanceRecords = {};
-            document.getElementById('loginScreen').style.display = 'flex';
-            document.getElementById('appContainer').style.display = 'none';
+auth.onAuthStateChanged(user => {
+    console.log('Auth state changed:', user ? user.email : 'none');
+    if (user) {
+        currentUser = user;
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'block';
+        document.getElementById('userDisplayName').textContent = user.displayName || user.email;
+        document.getElementById('userEmailText').textContent = user.email;
+        const initial = (user.displayName || user.email || '?')[0].toUpperCase();
+        document.getElementById('userAvatar').textContent = initial;
+        setupListeners();
+        renderScheduleSelector();
+        renderCalendar();
+    } else {
+        currentUser = null;
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.getElementById('appContainer').style.display = 'none';
+    }
+});
+
+function setupListeners() {
+    db.collection('users').doc(currentUser.uid).collection('students').onSnapshot(snap => {
+        students = snap.docs.map(d => d.data());
+        renderStudents();
+        renderCalendar();
+    });
+
+    db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').onSnapshot(snap => {
+        attendanceRecords = snap.exists ? (snap.data().records || {}) : {};
+        renderCalendar();
+    });
+}
+
+function renderScheduleSelector() {
+    let html = '<div style="display:grid;gap:12px;">';
+    DAYS.forEach((day, i) => {
+        html += `<div style="padding:12px;background:#f9f9f9;border-radius:6px;">
+            <label style="margin:0;cursor:pointer;display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="day_${i}" onchange="toggleDay(${i})">
+                <span>${day}</span>
+            </label>
+            <div id="times_${i}" style="display:none;margin-top:8px;">
+                <select id="time_${i}">
+                    ${TIMES.map(t => `<option value="${t}">${t}</option>`).join('')}
+                </select>
+            </div>
+        </div>`;
+    });
+    document.getElementById('scheduleSelector').innerHTML = html + '</div>';
+}
+
+window.toggleDay = function(i) {
+    const cb = document.getElementById(`day_${i}`);
+    document.getElementById(`times_${i}`).style.display = cb.checked ? 'block' : 'none';
+};
+
+window.addStudent = async function() {
+    const name = document.getElementById('studentName').value.trim();
+    const subject = document.getElementById('subject').value.trim();
+    const rate = parseFloat(document.getElementById('hourlyRate').value);
+    const duration = parseFloat(document.getElementById('duration').value);
+
+    if (!name || !subject || !rate || !duration) {
+        alert('Fill all fields');
+        return;
+    }
+
+    const schedule = [];
+    DAYS.forEach((day, i) => {
+        if (document.getElementById(`day_${i}`).checked) {
+            schedule.push({
+                day: i,
+                dayName: day,
+                time: document.getElementById(`time_${i}`).value
+            });
         }
     });
 
-    function setupListeners(uid) {
-        db.collection('users').doc(uid).collection('students').onSnapshot(snap => {
-            students = snap.docs.map(d => d.data());
-            renderStudents();
-            renderCalendar();
-        });
-
-        db.collection('users').doc(uid).collection('attendance').doc('records').onSnapshot(snap => {
-            attendanceRecords = snap.exists ? (snap.data().records || {}) : {};
-            renderCalendar();
-        });
+    if (schedule.length === 0) {
+        alert('Select at least one day');
+        return;
     }
 
-    // Students
-    function renderScheduleSelector() {
-        let html = '<div style="display:grid;gap:12px;">';
-        DAYS.forEach((day, i) => {
-            html += `<div style="padding:12px;background:#f9f9f9;border-radius:6px;">
-                <label style="margin:0;font-weight:500;cursor:pointer;">
-                    <input type="checkbox" id="day_${i}" onchange="toggleDay(${i})" style="margin-right:8px;">
-                    ${day}
-                </label>
-                <div id="times_${i}" style="display:none;margin-top:8px;">
-                    <select id="time_${i}" style="width:100%;">
-                        ${TIMES.map(t => `<option value="${t}">${t}</option>`).join('')}
-                    </select>
-                </div>
-            </div>`;
-        });
-        html += '</div>';
-        document.getElementById('scheduleSelector').innerHTML = html;
+    const student = {
+        id: Date.now(),
+        studentName: name,
+        subject,
+        hourlyRate: rate,
+        duration,
+        schedule,
+        createdAt: new Date().toISOString()
+    };
+
+    try {
+        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(student.id)).set(student);
+        document.getElementById('studentName').value = '';
+        document.getElementById('subject').value = '';
+        alert('Student added!');
+    } catch(e) {
+        alert('Error: ' + e.message);
     }
+};
 
-    function toggleDay(i) {
-        const cb = document.getElementById(`day_${i}`);
-        document.getElementById(`times_${i}`).style.display = cb.checked ? 'block' : 'none';
+function renderStudents() {
+    const html = students.map(s => {
+        const total = (s.schedule.length * s.duration * s.hourlyRate).toFixed(2);
+        return `<div class="student-card">
+            <div style="font-size:18px;font-weight:600;color:#1976d2;margin-bottom:12px;">${s.studentName}</div>
+            <div style="font-size:12px;color:#666;margin-bottom:8px;">📖 ${s.subject}</div>
+            <div class="lesson-slots">
+                ${s.schedule.map(slot => `<div class="lesson-slot">
+                    <div class="lesson-slot-day">${slot.dayName}</div>
+                    <div class="lesson-slot-time">${slot.time}</div>
+                </div>`).join('')}
+            </div>
+            <div class="stat-card" style="margin-top:12px;">
+                <div class="stat-label">Per Week</div>
+                <div class="stat-value">$${total}</div>
+            </div>
+            <button class="secondary" onclick="window.deleteStudent(${s.id})" style="margin-top:12px;width:100%;">Delete</button>
+        </div>`;
+    }).join('');
+    document.getElementById('studentsList').innerHTML = html || '<div class="empty-state">No students yet</div>';
+}
+
+window.deleteStudent = async function(id) {
+    if (!confirm('Delete?')) return;
+    try {
+        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(id)).delete();
+    } catch(e) {
+        alert('Error: ' + e.message);
     }
+};
 
-    function getSelectedSchedule() {
-        const schedule = [];
-        DAYS.forEach((day, i) => {
-            const cb = document.getElementById(`day_${i}`);
-            if (cb && cb.checked) {
-                schedule.push({
-                    day: i,
-                    dayName: day,
-                    time: document.getElementById(`time_${i}`).value
-                });
-            }
-        });
-        return schedule;
-    }
+function renderCalendar() {
+    updateCalendarRevenueSummary();
 
-    async function addStudent() {
-        const name = document.getElementById('studentName').value.trim();
-        const subject = document.getElementById('subject').value.trim();
-        const hourlyRate = parseFloat(document.getElementById('hourlyRate').value);
-        const duration = parseFloat(document.getElementById('duration').value);
-        const notes = document.getElementById('notes').value.trim();
-        const schedule = getSelectedSchedule();
+    const weekEnd = new Date(currentWeekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    document.getElementById('weekDisplay').textContent = `${currentWeekStart.toLocaleDateString()} – ${weekEnd.toLocaleDateString()}`;
 
-        if (!name || !subject || !hourlyRate || !duration || schedule.length === 0) {
-            alert('Please fill all fields and select at least one day');
-            return;
-        }
+    const weekStartKey = currentWeekStart.toISOString().split('T')[0];
+    const START_HOUR = 8;
+    const END_HOUR = 21;
+    const HOUR_PX = 60;
+    const TOTAL_HOURS = END_HOUR - START_HOUR;
 
-        const student = {
-            id: Date.now(),
-            studentName: name,
-            subject,
-            hourlyRate,
-            duration,
-            notes,
-            schedule,
-            createdAt: new Date().toISOString()
-        };
-
-        try {
-            await db.collection('users').doc(currentUser.uid).collection('students').doc(String(student.id)).set(student);
-            document.getElementById('studentName').value = '';
-            document.getElementById('subject').value = '';
-            document.getElementById('notes').value = '';
-            showSuccess('Student added!');
-        } catch (e) {
-            alert('Error: ' + e.message);
-        }
-    }
-
-    function renderStudents() {
-        const container = document.getElementById('studentsList');
-        if (students.length === 0) {
-            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No students yet. Add one above!</p></div>';
-            return;
-        }
-
-        container.innerHTML = students.map(s => {
-            const wk = (s.schedule.length * s.duration * s.hourlyRate).toFixed(2);
-            return `<div class="student-card">
-                <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:16px;">
-                    <div>
-                        <div style="font-size:20px;font-weight:600;color:#1976d2;">${s.studentName}</div>
-                        <div style="font-size:13px;color:#666;margin-top:4px;">📖 ${s.subject}</div>
-                    </div>
-                    <div style="display:flex;gap:8px;">
-                        <button onclick="deleteStudent(${s.id})" class="secondary" style="padding:8px 12px;font-size:12px;">Delete</button>
-                    </div>
-                </div>
-                <div class="lesson-slots">
-                    ${s.schedule.map(slot => `<div class="lesson-slot">
-                        <div class="lesson-slot-day">${slot.dayName}</div>
-                        <div class="lesson-slot-time">${slot.time}</div>
-                    </div>`).join('')}
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                    <div class="stat-card"><div class="stat-label">Per Week</div><div class="stat-value">$${wk}</div></div>
-                </div>
-                ${s.notes ? `<div style="font-size:12px;color:#666;margin-top:12px;">💬 ${s.notes}</div>` : ''}
-            </div>`;
-        }).join('');
-    }
-
-    async function deleteStudent(id) {
-        if (!confirm('Delete this student?')) return;
-        try {
-            await db.collection('users').doc(currentUser.uid).collection('students').doc(String(id)).delete();
-        } catch (e) {
-            alert('Error: ' + e.message);
-        }
-    }
-
-    // Calendar
-    function renderCalendar() {
-        updateCalendarRevenueSummary();
-
-        const weekEnd = new Date(currentWeekStart);
-        weekEnd.setDate(weekEnd.getDate() + 6);
-        document.getElementById('weekDisplay').textContent = `Week of ${currentWeekStart.toLocaleDateString('en-US')} – ${weekEnd.toLocaleDateString('en-US')}`;
-
-        const weekStartKey = currentWeekStart.toISOString().split('T')[0];
-        const START_HOUR = 8;
-        const END_HOUR = 21;
-        const HOUR_PX = 60;
-        const TOTAL_HOURS = END_HOUR - START_HOUR;
-        const GRID_HEIGHT = TOTAL_HOURS * HOUR_PX;
-
-        const weekLessons = Array(7).fill(null).map(() => []);
-        students.forEach(s => {
-            s.schedule.forEach(slot => {
-                weekLessons[slot.day].push({
-                    studentId: s.id,
-                    studentName: s.studentName,
-                    time: slot.time,
-                    duration: s.duration,
-                    revenue: (s.duration * s.hourlyRate).toFixed(2)
-                });
+    const weekLessons = Array(7).fill(null).map(() => []);
+    students.forEach(s => {
+        s.schedule.forEach(slot => {
+            weekLessons[slot.day].push({
+                studentId: s.id,
+                studentName: s.studentName,
+                time: slot.time,
+                duration: s.duration,
+                revenue: (s.duration * s.hourlyRate).toFixed(2)
             });
         });
+    });
 
-        let labelsHtml = '<div class="tg-label-header"></div>';
-        for (let h = START_HOUR; h <= END_HOUR; h++) {
-            labelsHtml += `<div class="tg-label">${String(h).padStart(2,'0')}:00</div>`;
-        }
-
-        const jsDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        let daysHtml = '';
-
-        for (let i = 0; i < 7; i++) {
-            const dayDate = new Date(currentWeekStart);
-            dayDate.setDate(dayDate.getDate() + i);
-            const isToday = dayDate.toDateString() === new Date().toDateString();
-            const dayLessons = weekLessons[i];
-
-            let linesHtml = '';
-            for (let h = 0; h <= TOTAL_HOURS; h++) {
-                linesHtml += `<div class="tg-hour-line" style="top:${h * HOUR_PX}px"></div>`;
-            }
-
-            let lessonsHtml = '';
-            dayLessons.forEach(lesson => {
-                const [lh, lm] = lesson.time.split(':').map(Number);
-                const topPx = ((lh - START_HOUR) + lm / 60) * HOUR_PX;
-                const heightPx = Math.max(lesson.duration * HOUR_PX, 22);
-                const key = `${lesson.studentId}_${weekStartKey}_${i}`;
-                const status = attendanceRecords[key];
-                const cls = status === 'attended' ? 'attended' : status === 'cancelled' ? 'cancelled' : '';
-                const icon = status === 'attended' ? ' ✓' : status === 'cancelled' ? ' ✗' : '';
-                lessonsHtml += `<div class="tg-lesson ${cls}" style="top:${topPx}px;height:${heightPx}px;" onclick="toggleAttendance(${lesson.studentId},'${weekStartKey}',${i})">
-                    <div class="tg-lesson-time">${lesson.time}${icon}</div>
-                    ${heightPx > 28 ? `<div class="tg-lesson-name">${lesson.studentName}</div>` : ''}
-                </div>`;
-            });
-
-            daysHtml += `<div class="tg-day ${isToday ? 'tg-today' : ''}">
-                <div class="tg-day-header">
-                    <span class="tg-day-num">${dayDate.getDate()}</span>
-                    <span class="tg-day-name">${jsDayNames[dayDate.getDay()]}</span>
-                </div>
-                <div class="tg-day-body" style="height:${GRID_HEIGHT}px;">
-                    ${linesHtml}${lessonsHtml}
-                </div>
-            </div>`;
-        }
-
-        document.getElementById('calendarGrid').innerHTML = `
-            <div class="tg-scroll">
-                <div class="tg-wrap">
-                    <div class="tg-labels">${labelsHtml}</div>
-                    <div class="tg-days">${daysHtml}</div>
-                </div>
-            </div>`;
+    let labelsHtml = '<div class="tg-label-header"></div>';
+    for (let h = START_HOUR; h <= END_HOUR; h++) {
+        labelsHtml += `<div class="tg-label">${String(h).padStart(2,'0')}:00</div>`;
     }
 
-    function updateCalendarRevenueSummary() {
-        const today = new Date();
-        const currentMonth = today.getMonth();
-        const currentYear = today.getFullYear();
+    const jsDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    let daysHtml = '';
 
-        let projectedRevenue = 0;
-        students.forEach(s => {
-            s.schedule.forEach(slot => {
-                projectedRevenue += s.duration * s.hourlyRate;
-            });
+    for (let i = 0; i < 7; i++) {
+        const dayDate = new Date(currentWeekStart);
+        dayDate.setDate(dayDate.getDate() + i);
+        const isToday = dayDate.toDateString() === new Date().toDateString();
+        const dayLessons = weekLessons[i];
+
+        let linesHtml = '';
+        for (let h = 0; h <= TOTAL_HOURS; h++) {
+            linesHtml += `<div class="tg-hour-line" style="top:${h * HOUR_PX}px"></div>`;
+        }
+
+        let lessonsHtml = '';
+        dayLessons.forEach(lesson => {
+            const [lh, lm] = lesson.time.split(':').map(Number);
+            const topPx = ((lh - START_HOUR) + lm / 60) * HOUR_PX;
+            const heightPx = Math.max(lesson.duration * HOUR_PX, 22);
+            const key = `${lesson.studentId}_${weekStartKey}_${i}`;
+            const status = attendanceRecords[key];
+            const cls = status === 'attended' ? 'attended' : status === 'cancelled' ? 'cancelled' : '';
+            const icon = status === 'attended' ? ' ✓' : status === 'cancelled' ? ' ✗' : '';
+            lessonsHtml += `<div class="tg-lesson ${cls}" style="top:${topPx}px;height:${heightPx}px;" onclick="window.toggleAttendance(${lesson.studentId},'${weekStartKey}',${i})">
+                <div class="tg-lesson-time">${lesson.time}${icon}</div>
+                <div>${lesson.studentName}</div>
+            </div>`;
         });
 
-        let revenueToDate = 0;
-        Object.entries(attendanceRecords).forEach(([key, status]) => {
-            if (status === 'attended') {
-                const [sid, dateStr, dayIdx] = key.split('_');
-                const recordDate = new Date(dateStr);
-                if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
-                    const student = students.find(s => s.id === parseInt(sid));
-                    if (student) {
-                        const schedule = student.schedule.find(sch => sch.day === parseInt(dayIdx));
-                        if (schedule) {
-                            revenueToDate += student.duration * student.hourlyRate;
-                        }
+        daysHtml += `<div class="tg-day ${isToday ? 'tg-today' : ''}">
+            <div class="tg-day-header">
+                <span class="tg-day-num">${dayDate.getDate()}</span>
+                <span class="tg-day-name">${jsDayNames[dayDate.getDay()]}</span>
+            </div>
+            <div class="tg-day-body" style="height:${TOTAL_HOURS * HOUR_PX}px;">
+                ${linesHtml}${lessonsHtml}
+            </div>
+        </div>`;
+    }
+
+    document.getElementById('calendarGrid').innerHTML = `
+        <div class="tg-scroll">
+            <div class="tg-wrap">
+                <div class="tg-labels">${labelsHtml}</div>
+                <div class="tg-days">${daysHtml}</div>
+            </div>
+        </div>`;
+}
+
+function updateCalendarRevenueSummary() {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+
+    let projectedRevenue = 0;
+    students.forEach(s => {
+        s.schedule.forEach(slot => {
+            projectedRevenue += s.duration * s.hourlyRate;
+        });
+    });
+
+    let revenueToDate = 0;
+    Object.entries(attendanceRecords).forEach(([key, status]) => {
+        if (status === 'attended') {
+            const [sid, dateStr, dayIdx] = key.split('_');
+            const recordDate = new Date(dateStr);
+            if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
+                const student = students.find(s => s.id === parseInt(sid));
+                if (student) {
+                    const schedule = student.schedule.find(sch => sch.day === parseInt(dayIdx));
+                    if (schedule) {
+                        revenueToDate += student.duration * student.hourlyRate;
                     }
                 }
             }
-        });
-
-        const todayDayOfWeek = today.getDay();
-        const scheduleDayIndex = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
-        let perDayRevenue = 0;
-        students.forEach(s => {
-            const todaySchedule = s.schedule.find(slot => slot.day === scheduleDayIndex);
-            if (todaySchedule) {
-                perDayRevenue += s.duration * s.hourlyRate;
-            }
-        });
-
-        const revenuePercent = projectedRevenue > 0 ? Math.round((revenueToDate / projectedRevenue) * 100) : 0;
-
-        document.getElementById('calendarRevenueToDate').textContent = `$${revenueToDate.toFixed(2)}`;
-        document.getElementById('calendarPerDayRevenue').textContent = `$${perDayRevenue.toFixed(2)}`;
-        document.getElementById('calendarRevenuePercent').textContent = `${revenuePercent}%`;
-    }
-
-    async function toggleAttendance(studentId, weekStartStr, dayIndex) {
-        const key = `${studentId}_${weekStartStr}_${dayIndex}`;
-        const current = attendanceRecords[key];
-        const updated = { ...attendanceRecords };
-        
-        if (!current) {
-            updated[key] = 'attended';
-        } else if (current === 'attended') {
-            updated[key] = 'cancelled';
-        } else {
-            delete updated[key];
         }
+    });
 
-        try {
-            await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').set({ records: updated });
-        } catch (e) {
-            console.error('Error:', e);
+    const todayDayOfWeek = today.getDay();
+    const scheduleDayIndex = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
+    let perDayRevenue = 0;
+    students.forEach(s => {
+        if (s.schedule.find(slot => slot.day === scheduleDayIndex)) {
+            const slot = s.schedule.find(slot => slot.day === scheduleDayIndex);
+            perDayRevenue += s.duration * s.hourlyRate;
         }
+    });
+
+    const revenuePercent = projectedRevenue > 0 ? Math.round((revenueToDate / projectedRevenue) * 100) : 0;
+
+    document.getElementById('calendarRevenueToDate').textContent = `$${revenueToDate.toFixed(2)}`;
+    document.getElementById('calendarPerDayRevenue').textContent = `$${perDayRevenue.toFixed(2)}`;
+    document.getElementById('calendarRevenuePercent').textContent = `${revenuePercent}%`;
+}
+
+window.toggleAttendance = async function(studentId, weekStartStr, dayIndex) {
+    const key = `${studentId}_${weekStartStr}_${dayIndex}`;
+    const current = attendanceRecords[key];
+    const updated = { ...attendanceRecords };
+    
+    if (!current) {
+        updated[key] = 'attended';
+    } else if (current === 'attended') {
+        updated[key] = 'cancelled';
+    } else {
+        delete updated[key];
     }
 
-    function previousWeek() {
-        currentWeekStart.setDate(currentWeekStart.getDate() - 7);
-        renderCalendar();
+    try {
+        await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').set({ records: updated });
+    } catch(e) {
+        console.error(e);
     }
+};
 
-    function nextWeek() {
-        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
-        renderCalendar();
-    }
+window.previousWeek = function() {
+    currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+    renderCalendar();
+};
 
-    // Analytics
-    function renderAnalytics() {
-        const container = document.getElementById('analyticsList');
-        if (students.length === 0) {
-            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💰</div><p>No students yet.</p></div>';
-            return;
-        }
+window.nextWeek = function() {
+    currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+    renderCalendar();
+};
 
-        let html = '<p>Analytics coming soon!</p>';
-        container.innerHTML = html;
-    }
+window.switchTab = function(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(tab).classList.add('active');
+    event.target.classList.add('active');
+    if (tab === 'calendar') renderCalendar();
+};
 
-    // Utils
-    function switchTab(tab, event) {
-        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-        document.getElementById(tab).classList.add('active');
-        if (event && event.target) event.target.classList.add('active');
-        if (tab === 'calendar') renderCalendar();
-        if (tab === 'analytics') renderAnalytics();
-    }
-
-    function showSuccess(msg) {
-        const el = document.getElementById('successMsg');
-        el.textContent = msg;
-        el.style.display = 'block';
-        setTimeout(() => { el.style.display = 'none'; }, 3000);
-    }
-
-    function getMonday(d) {
-        d = new Date(d);
-        const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        return new Date(d.setDate(diff));
-    }
-
-    async function exportToExcel() {
-        if (students.length === 0) { alert('No students to export.'); return; }
-        const rows = [['Student Name', 'Subject', 'Day', 'Time', 'Hours', 'Rate ($/hr)']];
-        students.forEach(s => {
-            s.schedule.forEach(slot => {
-                rows.push([s.studentName, s.subject, slot.dayName, slot.time, s.duration, s.hourlyRate]);
-            });
-        });
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(rows);
-        XLSX.utils.book_append_sheet(wb, ws, 'Sessions');
-        XLSX.writeFile(wb, `tuition_${new Date().toISOString().split('T')[0]}.xlsx`);
-    }
-
-    async function exportData() {
-        const data = { students, attendance: attendanceRecords, exportedAt: new Date().toISOString() };
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `tuition_backup_${new Date().toISOString().split('T')[0]}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-
-    async function importData(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const data = JSON.parse(e.target.result);
-                if (!data.students) { alert('Invalid format'); return; }
-                if (!confirm(`Import ${data.students.length} students?`)) return;
-                for (const s of data.students) {
-                    await db.collection('users').doc(currentUser.uid).collection('students').doc(String(s.id)).set(s);
-                }
-                alert('Imported!');
-            } catch (err) {
-                alert('Error: ' + err.message);
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    async function clearAllData() {
-        if (!confirm('⚠️ Delete ALL your data?')) return;
-        if (!confirm('Really? Cannot be undone.')) return;
-        try {
-            for (const s of students) {
-                await db.collection('users').doc(currentUser.uid).collection('students').doc(String(s.id)).delete();
-            }
-            await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').delete();
-            alert('All data deleted');
-        } catch (e) {
-            alert('Error: ' + e.message);
-        }
-    }
+console.log('Script loaded successfully');
 </script>
 
 </body>
