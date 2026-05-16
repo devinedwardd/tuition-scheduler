@@ -793,7 +793,7 @@ window.nextWeek = function() {
 // ── LESSON DETAIL MODAL ────────────────────────────────────────────────────
 let _lm = {};
 
-function buildLessonBody({ meta, status, subject, note, time, saveFunc, cancelFunc, deleteFunc }) {
+function buildLessonBody({ meta, status, subject, note, time, date, saveFunc, cancelFunc, deleteFunc }) {
     const ab = (id, label, active, color) =>
         `<button id="${id}" class="lm-att-btn" onclick="window.setLmStatus(${id==='lmbtn_pending'?'null':`'${id.replace('lmbtn_','')}'`})" style="background:${active?color:'#e8e8e8'};color:${active?'white':'#555'};">${label}</button>`;
     return `
