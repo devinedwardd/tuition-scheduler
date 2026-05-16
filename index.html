@@ -28,10 +28,11 @@
         .student-card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
         .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
         @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
-        .lesson-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
-        .lesson-slot { background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 6px; padding: 12px; text-align: center; }
-        .lesson-slot-time { font-weight: 600; font-size: 16px; color: #1565c0; margin-bottom: 4px; }
-        .lesson-slot-day { font-size: 12px; color: #666; margin-bottom: 8px; }
+        .lesson-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; margin-bottom: 0; }
+        .lesson-slot { background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 6px; padding: 7px 6px; text-align: center; }
+        .lesson-slot-day { font-size: 11px; font-weight: 600; color: #666; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+        .slot-time-select { width: 100%; border: none; background: transparent; font-size: 13px; font-weight: 700; color: #1565c0; text-align: center; cursor: pointer; padding: 1px 0; font-family: inherit; }
+        .slot-time-select:focus { outline: none; }
         .stat-card { background: #f5f5f5; border-radius: 6px; padding: 12px; }
         .stat-label { font-size: 12px; color: #999; margin-bottom: 4px; }
         .stat-value { font-size: 18px; font-weight: 600; color: #1976d2; }
@@ -362,24 +363,43 @@ window.addStudent = async function() {
 function renderStudents() {
     const html = students.map(s => {
         const total = (s.schedule.length * s.duration * s.hourlyRate).toFixed(2);
-        return `<div class="student-card">
-            <div style="font-size:18px;font-weight:600;color:#1976d2;margin-bottom:12px;">${s.studentName}</div>
-            <div style="font-size:12px;color:#666;margin-bottom:8px;">📖 ${s.subject}</div>
-            <div class="lesson-slots">
-                ${s.schedule.map(slot => `<div class="lesson-slot">
-                    <div class="lesson-slot-day">${slot.dayName}</div>
-                    <div class="lesson-slot-time">${slot.time}</div>
-                </div>`).join('')}
+        const slots = s.schedule.map(slot => `
+            <div class="lesson-slot">
+                <div class="lesson-slot-day">${slot.dayName.slice(0,3)}</div>
+                <select class="slot-time-select" onchange="window.updateSlotTime(${s.id},${slot.day},this.value)">
+                    ${TIMES.map(t => `<option value="${t}"${t===slot.time?' selected':''}>${t}</option>`).join('')}
+                </select>
+            </div>`).join('');
+
+        return `<div class="student-card" style="padding:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px;">
+                <div>
+                    <div style="font-size:15px;font-weight:700;color:#1976d2;">${s.studentName}</div>
+                    <div style="font-size:12px;color:#888;margin-top:2px;">📖 ${s.subject} &nbsp;·&nbsp; ${s.duration}h @ $${s.hourlyRate}/hr &nbsp;·&nbsp; <strong style="color:#1565c0;">$${total}/wk</strong></div>
+                </div>
+                <button class="secondary" onclick="window.deleteStudent(${s.id})" style="padding:5px 10px;font-size:12px;flex-shrink:0;">Delete</button>
             </div>
-            <div class="stat-card" style="margin-top:12px;">
-                <div class="stat-label">Per Week</div>
-                <div class="stat-value">$${total}</div>
-            </div>
-            <button class="secondary" onclick="window.deleteStudent(${s.id})" style="margin-top:12px;width:100%;">Delete</button>
+            <div class="lesson-slots">${slots}</div>
         </div>`;
     }).join('');
     document.getElementById('studentsList').innerHTML = html || '<div class="empty-state">No students yet</div>';
 }
+
+window.updateSlotTime = async function(studentId, dayIndex, newTime) {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+    const updated = {
+        ...student,
+        schedule: student.schedule.map(slot =>
+            slot.day === dayIndex ? { ...slot, time: newTime } : slot
+        )
+    };
+    try {
+        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(studentId)).set(updated);
+    } catch(e) {
+        alert('Error saving time: ' + e.message);
+    }
+};
 
 window.deleteStudent = async function(id) {
     if (!confirm('Delete?')) return;
