@@ -149,6 +149,10 @@
             <input type="number" id="duration" value="1" step="0.5">
         </div>
     </div>
+    <div class="form-group">
+        <label>Start Date <span style="font-size:12px;color:#aaa;font-weight:400;">(lessons before this date won't appear)</span></label>
+        <input type="date" id="startDate">
+    </div>
     <h2 style="margin-top: 28px;">Select Weekly Schedule</h2>
     <div id="scheduleSelector"></div>
     <button onclick="window.addStudent()" style="margin-top: 20px;">Add Student</button>
@@ -207,6 +211,14 @@
     <h2 style="margin-top: 28px;">Import</h2>
     <button class="secondary" onclick="document.getElementById('importFile').click()">📤 Restore from JSON</button>
     <input type="file" id="importFile" accept=".json" style="display:none;" onchange="window.importData(event)">
+    <p style="font-size: 12px; color: #f57c00; margin-top: 8px;">⚠️ Import replaces students and attendance records. Ad-hoc lessons are kept. If you see duplicate data after importing, use "Clear Attendance Only" below.</p>
+
+    <h2 style="margin-top: 28px;">Data Cleanup</h2>
+    <div class="btn-row">
+        <button class="secondary" onclick="window.clearAttendanceOnly()" style="border:1px solid #f57c00;color:#e65100;">🧹 Clear Attendance Only</button>
+        <button class="secondary" onclick="window.clearOneOffOnly()" style="border:1px solid #f57c00;color:#e65100;">🧹 Clear Ad-hoc Lessons Only</button>
+    </div>
+    <p style="font-size: 12px; color: #999; margin-top: 8px;">Use these to remove duplicate data without deleting your students or schedule.</p>
 
     <h2 style="margin-top: 28px;">Danger Zone</h2>
     <button class="danger-btn" onclick="window.clearAllData()">🗑️ Delete All My Data</button>
@@ -416,6 +428,7 @@ window.addStudent = async function() {
         hourlyRate: rate,
         duration,
         schedule,
+        startDate: document.getElementById('startDate').value || toLocalDateKey(new Date()),
         createdAt: new Date().toISOString()
     };
 
@@ -467,7 +480,7 @@ function renderStudents() {
             <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px;">
                 <div>
                     <div style="font-size:15px;font-weight:700;color:#1976d2;">${s.studentName}</div>
-                    <div style="font-size:12px;color:#888;margin-top:2px;">${s.duration}h @ $${s.hourlyRate}/hr &nbsp;·&nbsp; <strong style="color:#1565c0;">$${total}/wk</strong></div>
+                    <div style="font-size:12px;color:#888;margin-top:2px;">${s.duration}h @ $${s.hourlyRate}/hr &nbsp;·&nbsp; <strong style="color:#1565c0;">$${total}/wk</strong>${s.startDate ? ` &nbsp;·&nbsp; from ${new Date(s.startDate + 'T00:00:00').toLocaleDateString('en-SG',{day:'numeric',month:'short',year:'numeric'})}` : ''}</div>
                 </div>
                 <div style="display:flex;gap:6px;flex-shrink:0;">
                     <button onclick="window.editStudent(${s.id})" style="padding:5px 10px;font-size:12px;">Edit</button>
@@ -532,6 +545,7 @@ window.editStudent = function(studentId) {
             <div class="form-group"><label>Hourly Rate ($)</label><input type="number" id="ed_rate" value="${s.hourlyRate}" min="0" step="5"></div>
             <div class="form-group"><label>Duration (hours)</label><input type="number" id="ed_dur" value="${s.duration}" min="0.5" step="0.5"></div>
         </div>
+        <div class="form-group"><label>Start Date</label><input type="date" id="ed_startDate" value="${s.startDate || ''}"></div>
         <div style="font-size:14px;font-weight:600;margin:16px 0 10px;">Weekly Schedule</div>
         ${schedHtml}
         <div style="display:flex;gap:8px;margin-top:20px;">
@@ -557,7 +571,8 @@ window.saveEditStudent = async function(studentId) {
         return acc;
     }, []);
     if (schedule.length === 0) { alert('Select at least one day'); return; }
-    const updated = { ...s, studentName: name, hourlyRate: rate, duration: dur, schedule };
+    const startDate = document.getElementById('ed_startDate').value;
+    const updated = { ...s, studentName: name, hourlyRate: rate, duration: dur, schedule, startDate: startDate || s.startDate || '' };
     try {
         await db.collection('users').doc(currentUser.uid).collection('students').doc(String(studentId)).set(updated);
         window.closeEditModal();
@@ -595,6 +610,11 @@ function renderCalendar() {
         s.schedule.forEach(slot => {
             const key = `${s.id}_${weekStartKey}_${slot.day}`;
             const ovr = sessionData[key] || {};
+            // Compute effective lesson date and skip if before student start date
+            const slotDate = new Date(currentWeekStart);
+            slotDate.setDate(slotDate.getDate() + slot.day);
+            const effectiveDateKey = ovr.rescheduleDate || toLocalDateKey(slotDate);
+            if (s.startDate && effectiveDateKey < s.startDate) return;
             let renderDay = slot.day;
             if (ovr.rescheduleDate) {
                 const rd = new Date(ovr.rescheduleDate + 'T00:00:00');
@@ -650,8 +670,8 @@ function renderCalendar() {
             linesHtml += `<div class="tg-hour-line" style="top:${h * HOUR_PX}px"></div>`;
         }
 
-        let lessonsHtml = '';
-        dayLessons.forEach(lesson => {
+        // Pass 1: enrich lessons with display properties
+        const enriched = dayLessons.map(lesson => {
             let displayTime, displaySubject, status, onclick;
             if (lesson.isOneOff) {
                 displayTime = lesson.time;
@@ -668,13 +688,42 @@ function renderCalendar() {
             }
             const [lh, lmins] = displayTime.split(':').map(Number);
             const hourOffset = lh === 0 ? 24 : lh;
-            const topPx = ((hourOffset - START_HOUR) + lmins / 60) * HOUR_PX;
+            const startMins = hourOffset * 60 + lmins;
+            return { ...lesson, displayTime, displaySubject, status, onclick, startMins, durationMins: Math.round(lesson.duration * 60) };
+        });
+        // Pass 2: detect overlaps and assign horizontal columns
+        enriched.sort((a, b) => a.startMins - b.startMins);
+        const colEnds = [];
+        enriched.forEach(l => {
+            let col = 0;
+            while (col < colEnds.length && colEnds[col] > l.startMins) col++;
+            colEnds[col] = l.startMins + l.durationMins;
+            l._col = col;
+        });
+        enriched.forEach(l => {
+            let maxCol = l._col;
+            enriched.forEach(o => {
+                if (o === l) return;
+                if (o.startMins < l.startMins + l.durationMins && o.startMins + o.durationMins > l.startMins)
+                    maxCol = Math.max(maxCol, o._col);
+            });
+            l._totalCols = maxCol + 1;
+        });
+        // Pass 3: build HTML
+        let lessonsHtml = '';
+        enriched.forEach(lesson => {
+            const { displayTime, displaySubject, status, onclick, startMins, _col, _totalCols } = lesson;
+            const topPx = (startMins - START_HOUR * 60) / 60 * HOUR_PX;
             const heightPx = Math.max(lesson.duration * HOUR_PX, 22);
             const endTime = calcEndTime(displayTime, lesson.duration);
             const cls = status === 'attended' ? 'attended' : status === 'cancelled' ? 'cancelled' : '';
             const icon = status === 'attended' ? ' ✓' : status === 'cancelled' ? ' ✗' : '';
             const showEnd = heightPx >= 44;
-            lessonsHtml += `<div class="tg-lesson ${cls}${lesson.isOneOff ? ' one-off' : ''}" style="top:${topPx}px;height:${heightPx}px;" onclick="${onclick}">
+            const colW = 100 / _totalCols;
+            const posStyle = _totalCols > 1
+                ? `left:calc(${_col * colW}% + 1px);width:calc(${colW}% - 2px);right:auto;`
+                : 'left:2px;right:2px;';
+            lessonsHtml += `<div class="tg-lesson ${cls}${lesson.isOneOff ? ' one-off' : ''}" style="top:${topPx}px;height:${heightPx}px;${posStyle}" onclick="${onclick}">
                 <div class="tg-lesson-time">${displayTime}${showEnd ? '–'+endTime : ''}${icon}</div>
                 <div style="font-size:10px;opacity:0.92;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lesson.studentName}</div>
                 ${heightPx >= 44 && displaySubject ? `<div style="font-size:9px;opacity:0.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displaySubject}</div>` : ''}
@@ -714,16 +763,16 @@ function updateCalendarRevenueSummary() {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const monthName = viewed.toLocaleString('default', { month: 'long' });
 
-    const dayCount = [0,0,0,0,0,0,0];
-    for (let d = 1; d <= daysInMonth; d++) {
-        dayCount[new Date(year, month, d).getDay()]++;
-    }
-
     let projectedMonthly = 0;
     students.forEach(s => {
         s.schedule.forEach(slot => {
             const jsDay = slot.day === 6 ? 0 : slot.day + 1;
-            projectedMonthly += s.duration * s.hourlyRate * dayCount[jsDay];
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(year, month, d);
+                if (date.getDay() !== jsDay) continue;
+                if (s.startDate && toLocalDateKey(date) < s.startDate) continue;
+                projectedMonthly += s.duration * s.hourlyRate;
+            }
         });
     });
     // Include one-off lessons in projected (they're in the calendar regardless of status)
@@ -1043,12 +1092,6 @@ function renderAnalytics() {
     const thisWeekStart = getMonday(new Date());
     const thisWeekKey = thisWeekStart.toISOString().split('T')[0];
 
-    // Day occurrences in this month for projection
-    const dayCount = [0,0,0,0,0,0,0];
-    for (let d = 1; d <= daysInMonth; d++) {
-        dayCount[new Date(year, month, d).getDay()]++;
-    }
-
     // ── WEEKLY AGGREGATES ──
     let wkScheduled = 0, wkAttended = 0, wkCancelled = 0, wkEarned = 0, wkPotential = 0, wkLost = 0;
     students.forEach(s => {
@@ -1084,7 +1127,12 @@ function renderAnalytics() {
         s.schedule.forEach(slot => {
             totalWeekly += s.duration * s.hourlyRate;
             const jsDay = slot.day === 6 ? 0 : slot.day + 1;
-            totalProjected += s.duration * s.hourlyRate * dayCount[jsDay];
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(year, month, d);
+                if (date.getDay() !== jsDay) continue;
+                if (s.startDate && toLocalDateKey(date) < s.startDate) continue;
+                totalProjected += s.duration * s.hourlyRate;
+            }
         });
     });
     Object.values(oneOffLessons).forEach(ol => {
@@ -1224,10 +1272,16 @@ function renderAnalytics() {
 
     students.forEach(s => {
         const weeklyRev  = s.schedule.length * s.duration * s.hourlyRate;
-        const monthlyRev = s.schedule.reduce((sum, slot) => {
+        let monthlyRev = 0;
+        s.schedule.forEach(slot => {
             const jsDay = slot.day === 6 ? 0 : slot.day + 1;
-            return sum + s.duration * s.hourlyRate * dayCount[jsDay];
-        }, 0);
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(year, month, d);
+                if (date.getDay() !== jsDay) continue;
+                if (s.startDate && toLocalDateKey(date) < s.startDate) continue;
+                monthlyRev += s.duration * s.hourlyRate;
+            }
+        });
 
         // This week — per student
         let sWkAtt = 0, sWkCanc = 0, sWkPend = 0, sWkOneOff = 0;
@@ -1385,13 +1439,32 @@ window.importData = async function(event) {
     }
 };
 
+window.clearAttendanceOnly = async function() {
+    if (!confirm('Clear all attendance marks and session overrides (reschedules, notes)?\n\nStudents, schedules and ad-hoc lessons will NOT be deleted.')) return;
+    try {
+        await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').set({ records: {} });
+        await db.collection('users').doc(currentUser.uid).collection('session_data').doc('overrides').set({ data: {} });
+        alert('Attendance records cleared.');
+    } catch(e) { alert('Error: ' + e.message); }
+};
+
+window.clearOneOffOnly = async function() {
+    if (!confirm('Delete all ad-hoc (one-off) lessons?\n\nStudents, schedules and attendance records will NOT be deleted.')) return;
+    try {
+        await db.collection('users').doc(currentUser.uid).collection('one_off').doc('lessons').set({ lessons: {} });
+        alert('Ad-hoc lessons cleared.');
+    } catch(e) { alert('Error: ' + e.message); }
+};
+
 window.clearAllData = async function() {
     if (!confirm('Delete ALL your data? This cannot be undone.')) return;
-    if (!confirm('Are you absolutely sure? All students and attendance records will be permanently deleted.')) return;
+    if (!confirm('Are you absolutely sure? Everything will be permanently deleted.')) return;
     try {
         const snap = await db.collection('users').doc(currentUser.uid).collection('students').get();
         for (const d of snap.docs) await d.ref.delete();
         await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').delete();
+        await db.collection('users').doc(currentUser.uid).collection('session_data').doc('overrides').delete();
+        await db.collection('users').doc(currentUser.uid).collection('one_off').doc('lessons').delete();
         alert('All data deleted.');
     } catch(e) {
         alert('Error: ' + e.message);
