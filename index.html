@@ -1108,7 +1108,7 @@ window.nextWeek = function() {
 // ── LESSON DETAIL MODAL ────────────────────────────────────────────────────
 let _lm = {};
 
-function buildLessonBody({ meta, status, subject, note, time, date, duration, saveFunc, cancelFunc, deleteFunc }) {
+function buildLessonBody({ meta, status, subject, note, time, date, duration, rate, saveFunc, cancelFunc, deleteFunc }) {
     const ab = (id, label, active, color) =>
         `<button id="${id}" class="lm-att-btn" onclick="window.setLmStatus(${id==='lmbtn_pending'?'null':`'${id.replace('lmbtn_','')}'`})" style="background:${active?color:'#e8e8e8'};color:${active?'white':'#555'};">${label}</button>`;
     return `
@@ -1139,6 +1139,10 @@ function buildLessonBody({ meta, status, subject, note, time, date, duration, sa
             <label>Subject <span style="font-size:11px;color:#aaa;font-weight:400;">(this session only)</span></label>
             <input type="text" id="lm_subject" value="${subject}">
         </div>
+        ${rate != null ? `<div class="form-group">
+            <label>Hourly Rate ($) <span style="font-size:11px;color:#aaa;font-weight:400;">(this session only)</span></label>
+            <input type="number" id="lm_rate" value="${rate}" min="0" step="0.01" style="padding:8px 10px;">
+        </div>` : ''}
         <div class="form-group">
             <label>Note <span style="font-size:11px;color:#aaa;font-weight:400;">(optional)</span></label>
             <input type="text" id="lm_note" value="${note}" placeholder="e.g. topic covered, late start…">
@@ -1305,6 +1309,7 @@ window.openOneOffEditModal = function(id) {
     document.getElementById('lm_body').innerHTML = buildLessonBody({
         meta: `${dateStr} · ${lesson.time}–${endTime} · $${(lesson.duration * lesson.hourlyRate).toFixed(2)} · one-off`,
         status: lesson.status, subject: lesson.subject, note: lesson.note || '', time: lesson.time, date: lesson.dateKey, duration: lesson.duration,
+        rate: lesson.hourlyRate,
         saveFunc: 'window.saveOneOffEdit()',
         cancelFunc: 'window.closeLessonModal()',
         deleteFunc: `window.deleteOneOff('${id}')`
@@ -1318,8 +1323,10 @@ window.saveOneOffEdit = async function() {
     const time = document.getElementById('lm_time').value;
     const date = document.getElementById('lm_date').value;
     const dur = parseFloat(document.getElementById('lm_dur').value) || oneOffLessons[_lm.id].duration;
+    const rateEl = document.getElementById('lm_rate');
+    const rate = rateEl ? (parseFloat(rateEl.value) || oneOffLessons[_lm.id].hourlyRate) : oneOffLessons[_lm.id].hourlyRate;
     const { id, status } = _lm;
-    const updated = { ...oneOffLessons, [id]: { ...oneOffLessons[id], status, subject, note, time, duration: dur, dateKey: date || oneOffLessons[id].dateKey } };
+    const updated = { ...oneOffLessons, [id]: { ...oneOffLessons[id], status, subject, note, time, duration: dur, hourlyRate: rate, dateKey: date || oneOffLessons[id].dateKey } };
     try {
         await db.collection('users').doc(activeUid).collection('one_off').doc('lessons').set({ lessons: updated });
         window.closeLessonModal();
