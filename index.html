@@ -1389,11 +1389,24 @@ function renderAnalytics() {
     let wkScheduled = 0, wkAttended = 0, wkCancelled = 0, wkEarned = 0, wkPotential = 0, wkLost = 0;
     const todayDateKey = toLocalDateKey(today);
     students.forEach(s => {
-        if (s.endDate && todayDateKey > s.endDate) return; // skip archived students from weekly totals
+        if (s.endDate && todayDateKey > s.endDate) return; // skip archived students
         s.schedule.forEach(slot => {
             const key = `${s.id}_${thisWeekKey}_${slot.day}`;
+            const ovr = sessionData[key] || {};
+            // If rescheduled to a different week, skip — calendar hides it too
+            if (ovr.rescheduleDate) {
+                const rd = new Date(ovr.rescheduleDate + 'T00:00:00');
+                const diff = Math.round((rd - thisWeekStart) / 86400000);
+                if (diff < 0 || diff >= 7) return;
+            }
+            // Respect startDate
+            const slotDate = new Date(thisWeekStart);
+            slotDate.setDate(slotDate.getDate() + slot.day);
+            const slotDateKey = ovr.rescheduleDate || toLocalDateKey(slotDate);
+            if (s.startDate && slotDateKey < s.startDate) return;
+            if (s.endDate && slotDateKey > s.endDate) return;
             const status = attendanceRecords[key];
-            const rev = s.duration * s.hourlyRate;
+            const rev = (ovr.duration || s.duration) * s.hourlyRate;
             wkScheduled++;
             wkPotential += rev;
             if (status === 'attended')      { wkAttended++;  wkEarned += rev; }
