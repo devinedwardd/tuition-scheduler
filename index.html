@@ -107,6 +107,8 @@
         .lesson-table tr:last-child td { border-bottom:none; }
         .lesson-table tr.row-attended td { background:#fafff9; }
         .lesson-table tr.row-cancelled td { background:#fff8f8; }
+        .archived-badge { display:inline-block; background:#fff3e0; color:#e65100; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; vertical-align:middle; }
+        .archived-card { opacity:0.75; border-color:#ffe0b2 !important; }
     </style>
 </head>
 <body>
@@ -259,6 +261,28 @@
     </div>
 </div>
 
+<!-- ARCHIVE STUDENT MODAL -->
+<div class="modal" id="archiveModal">
+    <div class="modal-box" style="max-width:380px;">
+        <div class="modal-header">
+            <h2>Archive Student</h2>
+            <button class="modal-close" onclick="window.closeArchiveModal()">×</button>
+        </div>
+        <div style="padding:4px 0 16px;">
+            <p id="archiveStudentName" style="font-size:15px;font-weight:600;color:#1976d2;margin-bottom:16px;"></p>
+            <div class="form-group">
+                <label>Last lesson date</label>
+                <input type="date" id="archiveEndDate">
+            </div>
+            <p style="font-size:12px;color:#aaa;margin-top:-4px;margin-bottom:20px;">The student won't appear in the calendar after this date. All past sessions and analytics are preserved.</p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button class="secondary" onclick="window.closeArchiveModal()">Cancel</button>
+                <button style="background:#f57c00;" onclick="window.confirmArchive()">Archive Student</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- EDIT STUDENT MODAL -->
 <div class="modal" id="editModal">
     <div class="modal-box">
@@ -307,6 +331,7 @@ let oneOffLessons = {};
 let currentWeekStart = getMonday(new Date());
 let analyticsMonth = new Date().getMonth();
 let analyticsYear = new Date().getFullYear();
+let _archiveStudentId = null;
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const TIMES = (()=>{const t=[];for(let h=8;h<=23;h++){['00','15','30','45'].forEach(m=>{t.push(`${String(h).padStart(2,'0')}:${m}`);});}t.push('00:00');return t;})();
@@ -468,15 +493,27 @@ function toLocalDateKey(d) {
 }
 
 function renderStudents() {
-    if (students.length === 0) {
+    const active   = students.filter(s => !s.endDate);
+    const archived = students.filter(s => !!s.endDate);
+
+    if (active.length === 0 && archived.length === 0) {
         document.getElementById('studentsList').innerHTML = '<div class="empty-state">No students yet</div>';
         return;
     }
-    const cards = students.map(s => {
+
+    function buildCard(s, isArchived) {
         const total = (s.schedule.length * s.duration * s.hourlyRate).toFixed(2);
         const slots = s.schedule.map(slot => {
             const subj = slot.subject || s.subject;
             const end = calcEndTime(slot.time, s.duration);
+            if (isArchived) {
+                return `<div class="lesson-slot" style="opacity:0.6;">
+                    <div style="font-size:10px;font-weight:700;color:#777;text-align:center;padding:2px 0;">${subj}</div>
+                    <div class="lesson-slot-day">${slot.dayName.slice(0,3)}</div>
+                    <div style="font-size:13px;font-weight:700;color:#999;text-align:center;">${slot.time}</div>
+                    <div style="font-size:10px;color:#bbb;margin-top:2px;text-align:center;">ends ${end}</div>
+                </div>`;
+            }
             return `<div class="lesson-slot">
                 <input class="slot-subject-input" value="${subj}"
                     onblur="window.updateSlotSubject(${s.id},${slot.day},this.value)"
@@ -489,21 +526,49 @@ function renderStudents() {
             </div>`;
         }).join('');
 
-        return `<div class="student-card" style="padding:14px;">
+        const archiveDateStr = s.endDate ? new Date(s.endDate + 'T00:00:00').toLocaleDateString('en-SG',{day:'numeric',month:'short',year:'numeric'}) : '';
+        const subInfo = isArchived
+            ? `${s.duration}h @ $${s.hourlyRate}/hr &nbsp;·&nbsp; <strong style="color:#1565c0;">$${total}/wk</strong> &nbsp;<span class="archived-badge">Archived ${archiveDateStr}</span>`
+            : `${s.duration}h @ $${s.hourlyRate}/hr &nbsp;·&nbsp; <strong style="color:#1565c0;">$${total}/wk</strong>${s.startDate ? ` &nbsp;·&nbsp; from ${new Date(s.startDate + 'T00:00:00').toLocaleDateString('en-SG',{day:'numeric',month:'short',year:'numeric'})}` : ''}`;
+
+        const buttons = isArchived
+            ? `<button onclick="window.reactivateStudent(${s.id})" style="padding:5px 10px;font-size:12px;background:#388e3c;">Reactivate</button>
+               <button class="secondary" onclick="window.deleteStudent(${s.id})" style="padding:5px 10px;font-size:12px;">Delete</button>`
+            : `<button onclick="window.editStudent(${s.id})" style="padding:5px 10px;font-size:12px;">Edit</button>
+               <button onclick="window.openArchiveModal(${s.id})" style="padding:5px 10px;font-size:12px;background:#f57c00;">Archive</button>
+               <button class="secondary" onclick="window.deleteStudent(${s.id})" style="padding:5px 10px;font-size:12px;">Delete</button>`;
+
+        return `<div class="student-card${isArchived ? ' archived-card' : ''}" style="padding:14px;">
             <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px;">
                 <div>
-                    <div style="font-size:15px;font-weight:700;color:#1976d2;">${s.studentName}</div>
-                    <div style="font-size:12px;color:#888;margin-top:2px;">${s.duration}h @ $${s.hourlyRate}/hr &nbsp;·&nbsp; <strong style="color:#1565c0;">$${total}/wk</strong>${s.startDate ? ` &nbsp;·&nbsp; from ${new Date(s.startDate + 'T00:00:00').toLocaleDateString('en-SG',{day:'numeric',month:'short',year:'numeric'})}` : ''}</div>
+                    <div style="font-size:15px;font-weight:700;color:${isArchived?'#999':'#1976d2'};">${s.studentName}</div>
+                    <div style="font-size:12px;color:#888;margin-top:2px;">${subInfo}</div>
                 </div>
-                <div style="display:flex;gap:6px;flex-shrink:0;">
-                    <button onclick="window.editStudent(${s.id})" style="padding:5px 10px;font-size:12px;">Edit</button>
-                    <button class="secondary" onclick="window.deleteStudent(${s.id})" style="padding:5px 10px;font-size:12px;">Delete</button>
+                <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+                    ${buttons}
                 </div>
             </div>
             <div class="lesson-slots">${slots}</div>
         </div>`;
-    }).join('');
-    document.getElementById('studentsList').innerHTML = `<div class="students-grid">${cards}</div>`;
+    }
+
+    let html = active.length > 0
+        ? `<div class="students-grid">${active.map(s => buildCard(s, false)).join('')}</div>`
+        : '<div style="color:#aaa;font-size:13px;padding:12px 0;">No active students.</div>';
+
+    if (archived.length > 0) {
+        html += `<div style="margin-top:24px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h2 style="margin:0;font-size:15px;color:#aaa;">Former Students (${archived.length})</h2>
+                <button class="secondary" id="archivedToggleBtn" onclick="window.toggleArchivedSection()" style="font-size:12px;padding:5px 12px;">Show archived</button>
+            </div>
+            <div id="archivedSection" style="display:none;">
+                <div class="students-grid">${archived.map(s => buildCard(s, true)).join('')}</div>
+            </div>
+        </div>`;
+    }
+
+    document.getElementById('studentsList').innerHTML = html;
 }
 
 window.updateSlotTime = async function(studentId, dayIndex, newTime) {
@@ -628,6 +693,7 @@ function renderCalendar() {
             slotDate.setDate(slotDate.getDate() + slot.day);
             const effectiveDateKey = ovr.rescheduleDate || toLocalDateKey(slotDate);
             if (s.startDate && effectiveDateKey < s.startDate) return;
+            if (s.endDate && effectiveDateKey > s.endDate) return;
             let renderDay = slot.day;
             if (ovr.rescheduleDate) {
                 const rd = new Date(ovr.rescheduleDate + 'T00:00:00');
@@ -785,6 +851,7 @@ function updateCalendarRevenueSummary() {
                 const date = new Date(year, month, d);
                 if (date.getDay() !== jsDay) continue;
                 if (s.startDate && toLocalDateKey(date) < s.startDate) continue;
+                if (s.endDate && toLocalDateKey(date) > s.endDate) continue;
                 projectedMonthly += s.duration * s.hourlyRate;
             }
         });
@@ -1111,6 +1178,52 @@ window.setAnalyticsMonth = function(m, y) {
     renderAnalytics();
 };
 
+window.openArchiveModal = function(id) {
+    const s = students.find(st => st.id === id);
+    if (!s) return;
+    _archiveStudentId = id;
+    document.getElementById('archiveStudentName').textContent = `Archive "${s.studentName}"?`;
+    document.getElementById('archiveEndDate').value = toLocalDateKey(new Date());
+    document.getElementById('archiveModal').classList.add('active');
+};
+
+window.closeArchiveModal = function() {
+    document.getElementById('archiveModal').classList.remove('active');
+    _archiveStudentId = null;
+};
+
+window.confirmArchive = async function() {
+    if (!_archiveStudentId) return;
+    const endDate = document.getElementById('archiveEndDate').value;
+    if (!endDate) { alert('Please select a last lesson date'); return; }
+    const s = students.find(st => st.id === _archiveStudentId);
+    if (!s) return;
+    try {
+        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(_archiveStudentId)).set({ ...s, endDate });
+        window.closeArchiveModal();
+    } catch (e) { alert('Error: ' + e.message); }
+};
+
+window.reactivateStudent = async function(id) {
+    if (!confirm('Reactivate this student? They will appear in the calendar again from today.')) return;
+    const s = students.find(st => st.id === id);
+    if (!s) return;
+    const updated = { ...s };
+    delete updated.endDate;
+    try {
+        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(id)).set(updated);
+    } catch (e) { alert('Error: ' + e.message); }
+};
+
+window.toggleArchivedSection = function() {
+    const el = document.getElementById('archivedSection');
+    const btn = document.getElementById('archivedToggleBtn');
+    if (!el) return;
+    const hidden = el.style.display === 'none';
+    el.style.display = hidden ? 'block' : 'none';
+    btn.textContent = hidden ? 'Hide archived' : 'Show archived';
+};
+
 function renderAnalytics() {
     const container = document.getElementById('analyticsList');
     if (students.length === 0) {
@@ -1132,7 +1245,9 @@ function renderAnalytics() {
 
     // ── WEEKLY AGGREGATES ──
     let wkScheduled = 0, wkAttended = 0, wkCancelled = 0, wkEarned = 0, wkPotential = 0, wkLost = 0;
+    const todayDateKey = toLocalDateKey(today);
     students.forEach(s => {
+        if (s.endDate && todayDateKey > s.endDate) return; // skip archived students from weekly totals
         s.schedule.forEach(slot => {
             const key = `${s.id}_${thisWeekKey}_${slot.day}`;
             const status = attendanceRecords[key];
@@ -1169,6 +1284,7 @@ function renderAnalytics() {
                 const date = new Date(year, month, d);
                 if (date.getDay() !== jsDay) continue;
                 if (s.startDate && toLocalDateKey(date) < s.startDate) continue;
+                if (s.endDate && toLocalDateKey(date) > s.endDate) continue;
                 totalProjected += s.duration * s.hourlyRate;
             }
         });
@@ -1327,17 +1443,19 @@ function renderAnalytics() {
                 const date = new Date(year, month, d);
                 if (date.getDay() !== jsDay) continue;
                 if (s.startDate && toLocalDateKey(date) < s.startDate) continue;
+                if (s.endDate && toLocalDateKey(date) > s.endDate) continue;
                 monthlyRev += s.duration * s.hourlyRate;
             }
         });
 
         // This week — per student
+        const sIsArchived = !!(s.endDate && todayDateKey > s.endDate);
         let sWkAtt = 0, sWkCanc = 0, sWkPend = 0, sWkOneOff = 0;
         s.schedule.forEach(slot => {
             const status = attendanceRecords[`${s.id}_${thisWeekKey}_${slot.day}`];
             if (status === 'attended') sWkAtt++;
             else if (status === 'cancelled') sWkCanc++;
-            else sWkPend++;
+            else if (!sIsArchived) sWkPend++; // no phantom pending for archived students
         });
         Object.values(oneOffLessons).forEach(ol => {
             const match = ol.studentId === s.id || (ol.studentId === null && ol.studentName === s.studentName);
@@ -1412,6 +1530,7 @@ function renderAnalytics() {
                 const dk = toLocalDateKey(date);
                 if (dk <= todayKey) continue; // only future dates
                 if (s.startDate && dk < s.startDate) continue;
+                if (s.endDate && dk > s.endDate) continue;
                 const mon = getMonday(new Date(date));
                 const wkKey = mon.toISOString().split('T')[0];
                 const key = `${s.id}_${wkKey}_${slot.day}`;
@@ -1453,10 +1572,11 @@ function renderAnalytics() {
                </table>`
             : `<div style="font-size:11px;color:#aaa;margin-top:6px;font-style:italic;">No sessions recorded yet — mark sessions in the calendar.</div>`;
 
-        html += `<div class="student-card">
+        const archiveDateStr = s.endDate ? new Date(s.endDate + 'T00:00:00').toLocaleDateString('en-SG',{day:'numeric',month:'short',year:'numeric'}) : '';
+        html += `<div class="student-card${sIsArchived?' archived-card':''}">
             <div id="sph_${s.id}" class="spd-toggle" onclick="window.toggleStudentCard(${s.id})">
                 <div>
-                    <div style="font-size:16px;font-weight:700;color:#1976d2;">${s.studentName}</div>
+                    <div style="font-size:16px;font-weight:700;color:${sIsArchived?'#999':'#1976d2'};">${s.studentName}${sIsArchived?` <span class="archived-badge">Archived ${archiveDateStr}</span>`:''}</div>
                     <div style="font-size:12px;color:#666;margin-top:3px;">📖 ${s.subject} &nbsp;·&nbsp; ${s.duration}h @ $${s.hourlyRate}/hr</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;">
@@ -1471,15 +1591,22 @@ function renderAnalytics() {
             </div>
 
             <div id="spd_${s.id}" class="spd-detail">
-                ${sectionLabel('This week')}
-                <div class="revenue-summary" style="grid-template-columns:repeat(4,1fr);margin-top:0;">
-                    <div class="stat-card"><div class="stat-label">Scheduled</div><div class="stat-value">${s.schedule.length}</div></div>
-                    <div class="stat-card"><div class="stat-label">Attended</div><div class="stat-value" style="color:#388e3c;">${sWkAtt}</div></div>
-                    <div class="stat-card"><div class="stat-label">Cancelled</div><div class="stat-value" style="color:#c62828;">${sWkCanc}</div></div>
-                    <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value" style="color:#999;">${sWkPend}</div></div>
-                </div>
-                ${sWkOneOff > 0 ? `<div style="font-size:11px;color:#1976d2;margin-top:4px;">+ ${sWkOneOff} ad-hoc session${sWkOneOff>1?'s':''} this week</div>` : ''}
-                ${sMonthPending > 0 ? `<div style="font-size:11px;color:#888;margin-top:4px;">📅 ${sMonthPending} session${sMonthPending>1?'s':''} remaining this month (not yet marked)</div>` : ''}
+                ${sIsArchived
+                    ? `${sectionLabel('This week')}
+                       <div style="font-size:12px;color:#e65100;background:#fff3e0;border-radius:6px;padding:8px 12px;margin-top:0;">
+                           No longer active — archived on ${archiveDateStr}.
+                           ${sWkAtt > 0 || sWkCanc > 0 ? `This week: ${sWkAtt} attended · ${sWkCanc} cancelled before archiving.` : ''}
+                       </div>`
+                    : `${sectionLabel('This week')}
+                       <div class="revenue-summary" style="grid-template-columns:repeat(4,1fr);margin-top:0;">
+                           <div class="stat-card"><div class="stat-label">Scheduled</div><div class="stat-value">${s.schedule.length}</div></div>
+                           <div class="stat-card"><div class="stat-label">Attended</div><div class="stat-value" style="color:#388e3c;">${sWkAtt}</div></div>
+                           <div class="stat-card"><div class="stat-label">Cancelled</div><div class="stat-value" style="color:#c62828;">${sWkCanc}</div></div>
+                           <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value" style="color:#999;">${sWkPend}</div></div>
+                       </div>
+                       ${sWkOneOff > 0 ? `<div style="font-size:11px;color:#1976d2;margin-top:4px;">+ ${sWkOneOff} ad-hoc session${sWkOneOff>1?'s':''} this week</div>` : ''}
+                       ${sMonthPending > 0 ? `<div style="font-size:11px;color:#888;margin-top:4px;">📅 ${sMonthPending} session${sMonthPending>1?'s':''} remaining this month (not yet marked)</div>` : ''}`
+                }
 
                 ${sectionLabel(monthName + ' ' + year)}
                 <div class="revenue-summary" style="margin-top:0;">
