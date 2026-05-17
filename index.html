@@ -101,8 +101,12 @@
         .spd-toggle { cursor:pointer; user-select:none; display:flex; justify-content:space-between; align-items:start; }
         .spd-chevron { font-size:12px; color:#bbb; margin-left:8px; flex-shrink:0; margin-top:4px; transition:transform 0.2s; }
         .spd-toggle.collapsed .spd-chevron { transform:rotate(180deg); }
-        .lesson-list-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #f5f5f5; font-size:12px; gap:8px; }
-        .lesson-list-row:last-child { border-bottom:none; }
+        .lesson-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; }
+        .lesson-table th { text-align:left; font-size:11px; font-weight:600; color:#aaa; text-transform:uppercase; letter-spacing:0.5px; padding:5px 8px; border-bottom:1px solid #e0e0e0; }
+        .lesson-table td { text-align:left; padding:5px 8px; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
+        .lesson-table tr:last-child td { border-bottom:none; }
+        .lesson-table tr.row-attended td { background:#fafff9; }
+        .lesson-table tr.row-cancelled td { background:#fff8f8; }
     </style>
 </head>
 <body>
@@ -1315,8 +1319,8 @@ function renderAnalytics() {
 
         // This month — per student (regular sessions)
         let sAtt = 0, sCanc = 0, sEarned = 0, sLost = 0, sRescheduled = 0, sOneOff = 0;
-        // Build attended lesson list for display
-        const attendedLessons = [];
+        // Build session list for display (attended + cancelled)
+        const sessionList = [];
         Object.entries(attendanceRecords).forEach(([key, status]) => {
             const parts = key.split('_');
             if (parts[0] !== String(s.id)) return;
@@ -1332,8 +1336,11 @@ function renderAnalytics() {
             const rev = s.duration * s.hourlyRate;
             if (status === 'attended') {
                 sAtt++; sEarned += rev;
-                attendedLessons.push({ date: toLocalDateKey(rec), time, subject, rev, note: sd.note || '' });
-            } else if (status === 'cancelled') { sCanc++; sLost += rev; }
+                sessionList.push({ date: toLocalDateKey(rec), time, subject, rev, status: 'attended', note: sd.note || '' });
+            } else if (status === 'cancelled') {
+                sCanc++; sLost += rev;
+                sessionList.push({ date: toLocalDateKey(rec), time, subject, rev, status: 'cancelled', note: sd.note || '' });
+            }
         });
         // One-off lessons for this student this month — match by id OR by name (for custom ad-hoc)
         Object.values(oneOffLessons).forEach(ol => {
@@ -1345,8 +1352,11 @@ function renderAnalytics() {
             const rev = ol.duration * ol.hourlyRate;
             if (ol.status === 'attended') {
                 sAtt++; sEarned += rev;
-                attendedLessons.push({ date: ol.dateKey, time: ol.time, subject: ol.subject, rev, note: ol.note || '', isOneOff: true });
-            } else if (ol.status === 'cancelled') { sCanc++; sLost += rev; }
+                sessionList.push({ date: ol.dateKey, time: ol.time, subject: ol.subject, rev, status: 'attended', note: ol.note || '', isOneOff: true });
+            } else if (ol.status === 'cancelled') {
+                sCanc++; sLost += rev;
+                sessionList.push({ date: ol.dateKey, time: ol.time, subject: ol.subject, rev, status: 'cancelled', note: ol.note || '', isOneOff: true });
+            }
         });
         // Rescheduled sessions this month
         Object.entries(sessionData).forEach(([key, data]) => {
@@ -1381,21 +1391,36 @@ function renderAnalytics() {
         const sMarked  = sAtt + sCanc;
         const sAttRate = sMarked > 0 ? Math.round((sAtt / sMarked) * 100) : null;
 
-        // Sort attended lessons by date
-        attendedLessons.sort((a, b) => a.date > b.date ? 1 : -1);
-        const lessonListHtml = attendedLessons.length > 0
-            ? `<div style="margin-top:4px;">
-                ${attendedLessons.map((l, i) => {
+        // Sort sessions by date
+        sessionList.sort((a, b) => a.date > b.date ? 1 : a.date < b.date ? -1 : 0);
+        const lessonListHtml = sessionList.length > 0
+            ? `<table class="lesson-table">
+                <thead><tr>
+                    <th>#</th><th>Date</th><th>Time</th><th>Subject</th><th>Amount</th><th>Status</th>
+                </tr></thead>
+                <tbody>
+                ${sessionList.map((l, i) => {
                     const d = new Date(l.date + 'T00:00:00');
                     const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
-                    return `<div class="lesson-list-row">
-                        <span style="color:#888;min-width:110px;">${i+1}. ${d.getDate()} ${d.toLocaleString('default',{month:'short'})} ${dayName} · ${l.time}</span>
-                        <span style="color:#555;flex:1;text-align:center;">${l.subject}${l.isOneOff ? ' <span style="color:#1976d2;font-size:10px;">(ad-hoc)</span>' : ''}</span>
-                        <span style="color:#388e3c;font-weight:700;">$${l.rev.toFixed(2)}</span>
-                    </div>`;
+                    const dateStr = `${d.getDate()} ${d.toLocaleString('default',{month:'short'})} ${dayName}`;
+                    const subj = l.subject + (l.isOneOff ? ' <span style="color:#1976d2;font-size:10px;">(ad-hoc)</span>' : '');
+                    const amtColor = l.status === 'attended' ? '#388e3c' : '#c62828';
+                    const statusBadge = l.status === 'attended'
+                        ? `<span style="color:#388e3c;font-weight:600;">✓ Attended</span>`
+                        : `<span style="color:#c62828;font-weight:600;">✗ Cancelled</span>`;
+                    const amt = l.status === 'attended' ? `<span style="color:${amtColor};font-weight:700;">$${l.rev.toFixed(2)}</span>` : `<span style="color:#c62828;text-decoration:line-through;opacity:0.6;">$${l.rev.toFixed(2)}</span>`;
+                    return `<tr class="row-${l.status}">
+                        <td style="color:#bbb;">${i+1}</td>
+                        <td style="white-space:nowrap;">${dateStr}</td>
+                        <td style="color:#666;">${l.time}</td>
+                        <td>${subj}</td>
+                        <td>${amt}</td>
+                        <td>${statusBadge}</td>
+                    </tr>`;
                 }).join('')}
-               </div>`
-            : `<div style="font-size:11px;color:#aaa;margin-top:6px;font-style:italic;">No attended sessions recorded yet.</div>`;
+                </tbody>
+               </table>`
+            : `<div style="font-size:11px;color:#aaa;margin-top:6px;font-style:italic;">No sessions recorded yet — mark sessions in the calendar.</div>`;
 
         html += `<div class="student-card">
             <div id="sph_${s.id}" class="spd-toggle" onclick="window.toggleStudentCard(${s.id})">
@@ -1444,7 +1469,7 @@ function renderAnalytics() {
                     </div>${bar(sAttRate)}
                 </div>` : `<div style="font-size:11px;color:#aaa;margin-top:10px;">No sessions marked yet — click lessons in the calendar to track attendance.</div>`}
 
-                ${sectionLabel('Attended sessions — ' + monthName)}
+                ${sectionLabel('Sessions — ' + monthName)}
                 ${lessonListHtml}
             </div>
         </div>`;
