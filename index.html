@@ -872,7 +872,7 @@ function renderCalendar() {
                 if (diff >= 0 && diff < 7) renderDay = diff;
                 else return; // moved to a different week — skip this week
             }
-            const effectiveDur = ovr.duration || s.duration;
+            const effectiveDur = ovr.duration || slotDur(s, slot);
             weekLessons[renderDay].push({
                 isOneOff: false,
                 studentId: s.id,
@@ -1166,8 +1166,8 @@ window.openLessonModal = function(studentId, weekStartKey, dayIndex) {
     const note = sd.note || '';
     const sessionTime = sd.time || slot.time;
     const lessonDate = new Date(weekStartKey + 'T00:00:00');
-    lessonDate.setDate(lessonDate.getDate() + dayIndex);
-    const origDateKey = lessonDate.toISOString().split('T')[0];
+    lessonDate.setDate(lessonDate.getDate() + 1 + dayIndex);
+    const origDateKey = toLocalDateKey(lessonDate);
     const sessionDateKey = sd.rescheduleDate || origDateKey;
     const effectiveDuration = sd.duration || slotDur(student, slot);
     const endTime = calcEndTime(sessionTime, effectiveDuration);
@@ -1324,7 +1324,8 @@ window.saveOneOffEdit = async function() {
     const date = document.getElementById('lm_date').value;
     const dur = parseFloat(document.getElementById('lm_dur').value) || oneOffLessons[_lm.id].duration;
     const rateEl = document.getElementById('lm_rate');
-    const rate = rateEl ? (parseFloat(rateEl.value) || oneOffLessons[_lm.id].hourlyRate) : oneOffLessons[_lm.id].hourlyRate;
+    const _parsedRate = rateEl ? parseFloat(rateEl.value) : NaN;
+    const rate = (!isNaN(_parsedRate) && _parsedRate >= 0) ? _parsedRate : oneOffLessons[_lm.id].hourlyRate;
     const { id, status } = _lm;
     const updated = { ...oneOffLessons, [id]: { ...oneOffLessons[id], status, subject, note, time, duration: dur, hourlyRate: rate, dateKey: date || oneOffLessons[id].dateKey } };
     try {
@@ -1493,17 +1494,17 @@ function renderAnalytics() {
         const wkStartR = new Date(dateStr + 'T00:00:00');
         const rec = new Date(wkStartR);
         rec.setDate(rec.getDate() + 1 + parseInt(dayIdx));
-        if (rec.getMonth() === month && rec.getFullYear() === year) {
-            const student = students.find(s => s.id === parseInt(sid));
-            if (student) {
-                const sch = student.schedule.find(sc => sc.day === parseInt(dayIdx));
-                if (sch) {
-                    const rev = slotDur(student,sch) * slotRate(student,sch);
-                    if (status === 'attended')      { moAttended++;  moEarned += rev; }
-                    else if (status === 'cancelled') { moCancelled++; moLost   += rev; }
-                }
-            }
-        }
+        const student = students.find(s => s.id === parseInt(sid));
+        if (!student) return;
+        const sch = student.schedule.find(sc => sc.day === parseInt(dayIdx));
+        if (!sch) return;
+        const sd = sessionData[key] || {};
+        const effectiveDateKey = sd.rescheduleDate || toLocalDateKey(rec);
+        const effDate = new Date(effectiveDateKey + 'T00:00:00');
+        if (effDate.getMonth() !== month || effDate.getFullYear() !== year) return;
+        const rev = (sd.duration || slotDur(student, sch)) * slotRate(student, sch);
+        if (status === 'attended')      { moAttended++;  moEarned += rev; }
+        else if (status === 'cancelled') { moCancelled++; moLost   += rev; }
     });
     // One-off lessons in monthly totals
     Object.values(oneOffLessons).forEach(ol => {
