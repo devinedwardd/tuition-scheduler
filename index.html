@@ -671,8 +671,7 @@ function renderStudents() {
                 return `<div class="lesson-slot" style="opacity:0.6;">
                     <div style="font-size:10px;font-weight:700;color:#777;text-align:center;padding:2px 0;">${subj}</div>
                     <div class="lesson-slot-day">${slot.dayName.slice(0,3)}</div>
-                    <div style="font-size:13px;font-weight:700;color:#999;text-align:center;">${slot.time}</div>
-                    <div style="font-size:10px;color:#bbb;margin-top:2px;text-align:center;">ends ${end}</div>
+                    <div style="font-size:13px;font-weight:700;color:#999;text-align:center;">${slot.time}–${end}</div>
                 </div>`;
             }
             return `<div class="lesson-slot">
@@ -683,7 +682,7 @@ function renderStudents() {
                 <select class="slot-time-select" onchange="window.updateSlotTime(${s.id},${slot.day},this.value)">
                     ${TIMES.map(t => `<option value="${t}"${t===slot.time?' selected':''}>${t}</option>`).join('')}
                 </select>
-                <div style="font-size:10px;color:#888;margin-top:2px;">ends ${end}</div>
+                <div style="font-size:10px;color:#888;margin-top:2px;">${slot.time}–${end}</div>
             </div>`;
         }).join('');
 
