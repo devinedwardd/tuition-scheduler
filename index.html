@@ -140,6 +140,10 @@
         <div style="font-size:10px;font-weight:600;color:#aaa;letter-spacing:3px;text-transform:uppercase;margin-top:2px;">Learning Studio</div>
     </div>
 </div>
+<div id="teamBanner" style="display:none;background:#FFF8E7;border:1px solid #E8C87A;border-radius:8px;padding:10px 16px;margin-bottom:12px;display:none;align-items:center;gap:10px;font-size:13px;color:#7a5800;">
+    <span style="font-size:18px;">👥</span>
+    <span id="teamBannerText">Viewing as team member</span>
+</div>
     <div class="tabs">
         <button class="tab-btn active" onclick="window.switchTab('students')">My Students</button>
         <button class="tab-btn" onclick="window.switchTab('calendar')">Calendar</button>
@@ -244,6 +248,21 @@
             <div id="logoPreview" style="margin-top:10px;"></div>
         </div>
         <button onclick="window.saveBrandSettings()" style="margin-top:4px;">Save Brand Settings</button>
+    </div>
+
+    <h2 style="margin-top:28px;">Team Access</h2>
+    <div id="teamAccessSection">
+        <div id="teamAccessOwner" class="student-card" style="padding:20px;">
+            <p style="font-size:13px;color:#666;margin-bottom:12px;">Invite a co-tutor or assistant to view your schedule. They sign in with their own Google account.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                <input type="email" id="teamMemberEmail" placeholder="their-email@gmail.com" style="flex:1;min-width:200px;">
+                <button onclick="window.addTeamMember()" style="white-space:nowrap;">+ Add Member</button>
+            </div>
+            <div id="teamMembersList"></div>
+        </div>
+        <div id="teamAccessMember" style="display:none;" class="student-card" style="padding:20px;">
+            <p style="font-size:13px;color:#7a5800;">You are viewing this app as a team member. You have read &amp; write access to the schedule.</p>
+        </div>
     </div>
 
     <h2>Export</h2>
@@ -366,6 +385,10 @@ let analyticsYear = new Date().getFullYear();
 let _archiveStudentId = null;
 let paymentRecords = {};
 let brandSettings = {};
+let activeUid = null;
+let isTeamMember = false;
+let teamMembers = [];
+let ownerInfo = null;
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const TIMES = (()=>{const t=[];for(let h=8;h<=23;h++){['00','15','30','45'].forEach(m=>{t.push(`${String(h).padStart(2,'0')}:${m}`);});}t.push('00:00');return t;})();
@@ -393,21 +416,44 @@ window.signOutUser = function() {
     }
 };
 
-auth.onAuthStateChanged(user => {
+auth.onAuthStateChanged(async user => {
     console.log('Auth state changed:', user ? user.email : 'none');
     if (user) {
         currentUser = user;
+        // Check if this user is an authorized team member viewing an owner's data
+        try {
+            const sharedDoc = await db.collection('shared_access').doc(user.email).get();
+            if (sharedDoc.exists) {
+                const data = sharedDoc.data();
+                activeUid = data.ownerUid;
+                isTeamMember = true;
+                ownerInfo = data;
+            } else {
+                activeUid = user.uid;
+                isTeamMember = false;
+                ownerInfo = null;
+            }
+        } catch(e) {
+            console.warn('shared_access check failed, defaulting to own uid:', e);
+            activeUid = user.uid;
+            isTeamMember = false;
+            ownerInfo = null;
+        }
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('appContainer').style.display = 'block';
         document.getElementById('userDisplayName').textContent = user.displayName || user.email;
         document.getElementById('userEmailText').textContent = user.email;
         const initial = (user.displayName || user.email || '?')[0].toUpperCase();
         document.getElementById('userAvatar').textContent = initial;
+        renderTeamBanner();
         setupListeners();
         renderScheduleSelector();
         renderCalendar();
     } else {
         currentUser = null;
+        activeUid = null;
+        isTeamMember = false;
+        ownerInfo = null;
         document.getElementById('loginScreen').style.display = 'flex';
         document.getElementById('appContainer').style.display = 'none';
     }
@@ -418,7 +464,7 @@ function isAnalyticsActive() {
 }
 
 function setupListeners() {
-    db.collection('users').doc(currentUser.uid).collection('students').onSnapshot(snap => {
+    db.collection('users').doc(activeUid).collection('students').onSnapshot(snap => {
         students = snap.docs.map(d => d.data());
         ensureStudentCodes();
         renderStudents();
@@ -426,32 +472,40 @@ function setupListeners() {
         if (isAnalyticsActive()) renderAnalytics();
     });
 
-    db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').onSnapshot(snap => {
+    db.collection('users').doc(activeUid).collection('attendance').doc('records').onSnapshot(snap => {
         attendanceRecords = snap.exists ? (snap.data().records || {}) : {};
         renderCalendar();
         if (isAnalyticsActive()) renderAnalytics();
     });
 
-    db.collection('users').doc(currentUser.uid).collection('session_data').doc('overrides').onSnapshot(snap => {
+    db.collection('users').doc(activeUid).collection('session_data').doc('overrides').onSnapshot(snap => {
         sessionData = snap.exists ? (snap.data().data || {}) : {};
         renderCalendar();
     });
 
-    db.collection('users').doc(currentUser.uid).collection('one_off').doc('lessons').onSnapshot(snap => {
+    db.collection('users').doc(activeUid).collection('one_off').doc('lessons').onSnapshot(snap => {
         oneOffLessons = snap.exists ? (snap.data().lessons || {}) : {};
         renderCalendar();
         if (isAnalyticsActive()) renderAnalytics();
     });
 
-    db.collection('users').doc(currentUser.uid).collection('payment').doc('records').onSnapshot(snap => {
+    db.collection('users').doc(activeUid).collection('payment').doc('records').onSnapshot(snap => {
         paymentRecords = snap.exists ? (snap.data().records || {}) : {};
         if (isAnalyticsActive()) renderAnalytics();
     });
 
-    db.collection('users').doc(currentUser.uid).collection('brand').doc('settings').onSnapshot(snap => {
+    db.collection('users').doc(activeUid).collection('brand').doc('settings').onSnapshot(snap => {
         brandSettings = snap.exists ? snap.data() : {};
         renderBrandSettings();
     });
+
+    // Team members list — only the owner manages this
+    if (!isTeamMember) {
+        db.collection('users').doc(activeUid).collection('access').doc('team').onSnapshot(snap => {
+            teamMembers = snap.exists ? (snap.data().members || []) : [];
+            renderTeamAccess();
+        });
+    }
 }
 
 function renderScheduleSelector() {
@@ -491,7 +545,7 @@ async function ensureStudentCodes() {
     for (const s of sorted) {
         maxNum++;
         const code = `ELS${String(maxNum).padStart(3, '0')}`;
-        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(s.id)).update({ studentCode: code });
+        await db.collection('users').doc(activeUid).collection('students').doc(String(s.id)).update({ studentCode: code });
     }
 }
 
@@ -546,7 +600,7 @@ window.addStudent = async function() {
     };
 
     try {
-        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(student.id)).set(student);
+        await db.collection('users').doc(activeUid).collection('students').doc(String(student.id)).set(student);
         document.getElementById('studentName').value = '';
         document.getElementById('subject').value = '';
         alert('Student added!');
@@ -652,7 +706,7 @@ window.updateSlotTime = async function(studentId, dayIndex, newTime) {
     const updated = { ...student, schedule: student.schedule.map(slot =>
         slot.day === dayIndex ? { ...slot, time: newTime } : slot) };
     try {
-        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(studentId)).set(updated);
+        await db.collection('users').doc(activeUid).collection('students').doc(String(studentId)).set(updated);
     } catch(e) { alert('Error: ' + e.message); }
 };
 
@@ -662,7 +716,7 @@ window.updateSlotSubject = async function(studentId, dayIndex, newSubject) {
     const updated = { ...student, schedule: student.schedule.map(slot =>
         slot.day === dayIndex ? { ...slot, subject: newSubject.trim() } : slot) };
     try {
-        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(studentId)).set(updated);
+        await db.collection('users').doc(activeUid).collection('students').doc(String(studentId)).set(updated);
     } catch(e) { alert('Error: ' + e.message); }
 };
 
@@ -727,7 +781,7 @@ window.saveEditStudent = async function(studentId) {
     const startDate = document.getElementById('ed_startDate').value;
     const updated = { ...s, studentName: name, hourlyRate: rate, duration: dur, schedule, startDate: startDate || s.startDate || '' };
     try {
-        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(studentId)).set(updated);
+        await db.collection('users').doc(activeUid).collection('students').doc(String(studentId)).set(updated);
         window.closeEditModal();
     } catch(e) { alert('Error: ' + e.message); }
 };
@@ -739,7 +793,7 @@ window.closeEditModal = function() {
 window.deleteStudent = async function(id) {
     if (!confirm('Delete?')) return;
     try {
-        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(id)).delete();
+        await db.collection('users').doc(activeUid).collection('students').doc(String(id)).delete();
     } catch(e) {
         alert('Error: ' + e.message);
     }
@@ -993,7 +1047,7 @@ window.toggleAttendance = async function(studentId, weekStartStr, dayIndex) {
     }
 
     try {
-        await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').set({ records: updated });
+        await db.collection('users').doc(activeUid).collection('attendance').doc('records').set({ records: updated });
     } catch(e) {
         console.error(e);
     }
@@ -1114,8 +1168,8 @@ window.saveLessonModal = async function() {
         delete updSd[key];
     }
     try {
-        await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').set({ records: updAtt });
-        await db.collection('users').doc(currentUser.uid).collection('session_data').doc('overrides').set({ data: updSd });
+        await db.collection('users').doc(activeUid).collection('attendance').doc('records').set({ records: updAtt });
+        await db.collection('users').doc(activeUid).collection('session_data').doc('overrides').set({ data: updSd });
         window.closeLessonModal();
     } catch(e) { alert('Error: ' + e.message); }
 };
@@ -1194,7 +1248,7 @@ window.saveOneOff = async function() {
     const id = String(Date.now());
     const updated = { ...oneOffLessons, [id]: { id, dateKey: _lm.dateKey, dayIndex: _lm.dayIndex, studentId, studentName: name, subject, time, duration: dur, hourlyRate: rate, status: null, note } };
     try {
-        await db.collection('users').doc(currentUser.uid).collection('one_off').doc('lessons').set({ lessons: updated });
+        await db.collection('users').doc(activeUid).collection('one_off').doc('lessons').set({ lessons: updated });
         document.getElementById('oneOffModal').classList.remove('active');
     } catch(e) { alert('Error: ' + e.message); }
 };
@@ -1225,7 +1279,7 @@ window.saveOneOffEdit = async function() {
     const { id, status } = _lm;
     const updated = { ...oneOffLessons, [id]: { ...oneOffLessons[id], status, subject, note, time, duration: dur, dateKey: date || oneOffLessons[id].dateKey } };
     try {
-        await db.collection('users').doc(currentUser.uid).collection('one_off').doc('lessons').set({ lessons: updated });
+        await db.collection('users').doc(activeUid).collection('one_off').doc('lessons').set({ lessons: updated });
         window.closeLessonModal();
     } catch(e) { alert('Error: ' + e.message); }
 };
@@ -1235,7 +1289,7 @@ window.deleteOneOff = async function(id) {
     const updated = { ...oneOffLessons };
     delete updated[id];
     try {
-        await db.collection('users').doc(currentUser.uid).collection('one_off').doc('lessons').set({ lessons: updated });
+        await db.collection('users').doc(activeUid).collection('one_off').doc('lessons').set({ lessons: updated });
         window.closeLessonModal();
     } catch(e) { alert('Error: ' + e.message); }
 };
@@ -1274,7 +1328,7 @@ window.confirmArchive = async function() {
     const s = students.find(st => st.id === _archiveStudentId);
     if (!s) return;
     try {
-        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(_archiveStudentId)).set({ ...s, endDate });
+        await db.collection('users').doc(activeUid).collection('students').doc(String(_archiveStudentId)).set({ ...s, endDate });
         window.closeArchiveModal();
     } catch (e) { alert('Error: ' + e.message); }
 };
@@ -1286,7 +1340,7 @@ window.reactivateStudent = async function(id) {
     const updated = { ...s };
     delete updated.endDate;
     try {
-        await db.collection('users').doc(currentUser.uid).collection('students').doc(String(id)).set(updated);
+        await db.collection('users').doc(activeUid).collection('students').doc(String(id)).set(updated);
     } catch (e) { alert('Error: ' + e.message); }
 };
 
@@ -1793,13 +1847,13 @@ window.importData = async function(event) {
         const text = await file.text();
         const data = JSON.parse(text);
         if (!confirm(`Import ${(data.students || []).length} students? Existing data will be overwritten.`)) return;
-        const snap = await db.collection('users').doc(currentUser.uid).collection('students').get();
+        const snap = await db.collection('users').doc(activeUid).collection('students').get();
         for (const d of snap.docs) await d.ref.delete();
         for (const student of (data.students || [])) {
-            await db.collection('users').doc(currentUser.uid).collection('students').doc(String(student.id)).set(student);
+            await db.collection('users').doc(activeUid).collection('students').doc(String(student.id)).set(student);
         }
         if (data.attendanceRecords) {
-            await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').set({ records: data.attendanceRecords });
+            await db.collection('users').doc(activeUid).collection('attendance').doc('records').set({ records: data.attendanceRecords });
         }
         alert('Import successful!');
         event.target.value = '';
@@ -1811,8 +1865,8 @@ window.importData = async function(event) {
 window.clearAttendanceOnly = async function() {
     if (!confirm('Clear all attendance marks and session overrides (reschedules, notes)?\n\nStudents, schedules and ad-hoc lessons will NOT be deleted.')) return;
     try {
-        await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').set({ records: {} });
-        await db.collection('users').doc(currentUser.uid).collection('session_data').doc('overrides').set({ data: {} });
+        await db.collection('users').doc(activeUid).collection('attendance').doc('records').set({ records: {} });
+        await db.collection('users').doc(activeUid).collection('session_data').doc('overrides').set({ data: {} });
         alert('Attendance records cleared.');
     } catch(e) { alert('Error: ' + e.message); }
 };
@@ -1820,7 +1874,7 @@ window.clearAttendanceOnly = async function() {
 window.clearOneOffOnly = async function() {
     if (!confirm('Delete all ad-hoc (one-off) lessons?\n\nStudents, schedules and attendance records will NOT be deleted.')) return;
     try {
-        await db.collection('users').doc(currentUser.uid).collection('one_off').doc('lessons').set({ lessons: {} });
+        await db.collection('users').doc(activeUid).collection('one_off').doc('lessons').set({ lessons: {} });
         alert('Ad-hoc lessons cleared.');
     } catch(e) { alert('Error: ' + e.message); }
 };
@@ -1829,15 +1883,83 @@ window.clearAllData = async function() {
     if (!confirm('Delete ALL your data? This cannot be undone.')) return;
     if (!confirm('Are you absolutely sure? Everything will be permanently deleted.')) return;
     try {
-        const snap = await db.collection('users').doc(currentUser.uid).collection('students').get();
+        const snap = await db.collection('users').doc(activeUid).collection('students').get();
         for (const d of snap.docs) await d.ref.delete();
-        await db.collection('users').doc(currentUser.uid).collection('attendance').doc('records').delete();
-        await db.collection('users').doc(currentUser.uid).collection('session_data').doc('overrides').delete();
-        await db.collection('users').doc(currentUser.uid).collection('one_off').doc('lessons').delete();
+        await db.collection('users').doc(activeUid).collection('attendance').doc('records').delete();
+        await db.collection('users').doc(activeUid).collection('session_data').doc('overrides').delete();
+        await db.collection('users').doc(activeUid).collection('one_off').doc('lessons').delete();
         alert('All data deleted.');
     } catch(e) {
         alert('Error: ' + e.message);
     }
+};
+
+function renderTeamBanner() {
+    const banner = document.getElementById('teamBanner');
+    if (!banner) return;
+    if (isTeamMember && ownerInfo) {
+        document.getElementById('teamBannerText').textContent =
+            `Viewing ${ownerInfo.ownerName || ownerInfo.ownerEmail}'s schedule as a team member`;
+        banner.style.display = 'flex';
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
+function renderTeamAccess() {
+    const ownerSection = document.getElementById('teamAccessOwner');
+    const memberSection = document.getElementById('teamAccessMember');
+    if (!ownerSection || !memberSection) return;
+    if (isTeamMember) {
+        ownerSection.style.display = 'none';
+        memberSection.style.display = 'block';
+        return;
+    }
+    ownerSection.style.display = 'block';
+    memberSection.style.display = 'none';
+    const list = document.getElementById('teamMembersList');
+    if (!list) return;
+    if (teamMembers.length === 0) {
+        list.innerHTML = '<p style="font-size:13px;color:#aaa;margin:0;">No team members added yet.</p>';
+        return;
+    }
+    list.innerHTML = teamMembers.map(email =>
+        `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f9f9f9;border-radius:6px;margin-bottom:6px;font-size:13px;">
+            <span>👤 ${email}</span>
+            <button class="secondary" onclick="window.removeTeamMember('${email}')" style="padding:4px 10px;font-size:12px;color:#c62828;border-color:#e57373;">Remove</button>
+        </div>`
+    ).join('');
+}
+
+window.addTeamMember = async function() {
+    const input = document.getElementById('teamMemberEmail');
+    const email = (input ? input.value : '').trim().toLowerCase();
+    if (!email || !email.includes('@')) { alert('Please enter a valid email address.'); return; }
+    if (teamMembers.includes(email)) { alert('This person is already a team member.'); return; }
+    try {
+        // Write to owner's team list
+        const updatedMembers = [...teamMembers, email];
+        await db.collection('users').doc(activeUid).collection('access').doc('team').set({ members: updatedMembers });
+        // Write reverse-lookup doc so the member's login check finds the owner
+        await db.collection('shared_access').doc(email).set({
+            ownerUid: activeUid,
+            ownerEmail: currentUser.email,
+            ownerName: currentUser.displayName || currentUser.email,
+            addedAt: new Date().toISOString()
+        });
+        if (input) input.value = '';
+        alert(`✅ ${email} added! They can now sign in with their own Google account to access your schedule.`);
+    } catch(e) { alert('Error adding team member: ' + e.message); }
+};
+
+window.removeTeamMember = async function(email) {
+    if (!confirm(`Remove ${email} from your team?`)) return;
+    try {
+        const updatedMembers = teamMembers.filter(m => m !== email);
+        await db.collection('users').doc(activeUid).collection('access').doc('team').set({ members: updatedMembers });
+        // Remove the reverse-lookup doc
+        await db.collection('shared_access').doc(email).delete();
+    } catch(e) { alert('Error removing team member: ' + e.message); }
 };
 
 function renderBrandSettings() {
@@ -1876,14 +1998,14 @@ window.saveBrandSettings = async function() {
     const contact = document.getElementById('brandContact').value.trim();
     const updated = { ...brandSettings, brandName: name, contact };
     try {
-        await db.collection('users').doc(currentUser.uid).collection('brand').doc('settings').set(updated);
+        await db.collection('users').doc(activeUid).collection('brand').doc('settings').set(updated);
         alert('Brand settings saved!');
     } catch(e) { alert('Error: ' + e.message); }
 };
 
 window.togglePayment = async function(payKey, checked) {
     const updated = { ...paymentRecords, [payKey]: checked };
-    await db.collection('users').doc(currentUser.uid).collection('payment').doc('records').set({ records: updated });
+    await db.collection('users').doc(activeUid).collection('payment').doc('records').set({ records: updated });
 };
 
 window.markAllPaid = async function(studentId, month, year) {
@@ -1903,7 +2025,7 @@ window.markAllPaid = async function(studentId, month, year) {
         const olDate = new Date(ol.dateKey + 'T00:00:00');
         if (olDate.getMonth() === month && olDate.getFullYear() === year) updated[`oneoff_${ol.id}`] = true;
     });
-    await db.collection('users').doc(currentUser.uid).collection('payment').doc('records').set({ records: updated });
+    await db.collection('users').doc(activeUid).collection('payment').doc('records').set({ records: updated });
 };
 
 window.generateInvoice = function(studentId, month, year) {
@@ -2004,7 +2126,7 @@ window.generateInvoice = function(studentId, month, year) {
     win.document.write(html);
     win.document.close();
     // Increment invoice counter
-    db.collection('users').doc(currentUser.uid).collection('brand').doc('settings').set({ ...brandSettings, invoiceCounter: invNum });
+    db.collection('users').doc(activeUid).collection('brand').doc('settings').set({ ...brandSettings, invoiceCounter: invNum });
 };
 
 window.switchTab = function(tab) {
