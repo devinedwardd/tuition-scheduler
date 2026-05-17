@@ -803,7 +803,7 @@ function updateCalendarRevenueSummary() {
         const sid = parts[0], dateStr = parts[1], dayIdx = parts[2];
         const wkStart = new Date(dateStr + 'T00:00:00');
         const recordDate = new Date(wkStart);
-        recordDate.setDate(recordDate.getDate() + parseInt(dayIdx));
+        recordDate.setDate(recordDate.getDate() + 1 + parseInt(dayIdx));
         if (recordDate.getMonth() !== month || recordDate.getFullYear() !== year) return;
         const student = students.find(s => s.id === parseInt(sid));
         if (!student) return;
@@ -1204,7 +1204,7 @@ function renderAnalytics() {
         if (parts.length < 3) return;
         const wkStart = new Date(parts[1] + 'T00:00:00');
         const origDate = new Date(wkStart);
-        origDate.setDate(origDate.getDate() + parseInt(parts[2]));
+        origDate.setDate(origDate.getDate() + 1 + parseInt(parts[2]));
         if (origDate.getMonth() !== month || origDate.getFullYear() !== year) return;
         const student = students.find(s => s.id === parseInt(parts[0]));
         if (student) moRescheduled++;
@@ -1336,14 +1336,15 @@ function renderAnalytics() {
             if (parts[0] !== String(s.id)) return;
             const wkStart = new Date(parts[1] + 'T00:00:00');
             const rec = new Date(wkStart);
-            rec.setDate(rec.getDate() + parseInt(parts[2]));
+            rec.setDate(rec.getDate() + 1 + parseInt(parts[2]));
             if (rec.getMonth() !== month || rec.getFullYear() !== year) return;
             const sch = s.schedule.find(sc => sc.day === parseInt(parts[2]));
             if (!sch) return;
             const sd = sessionData[key] || {};
             const subject = sd.subject || sch.subject || s.subject;
             const time = sd.time || sch.time;
-            const rev = s.duration * s.hourlyRate;
+            const effectiveDuration = sd.duration || s.duration;
+            const rev = effectiveDuration * s.hourlyRate;
             if (status === 'attended') {
                 sAtt++; sEarned += rev;
                 sessionList.push({ date: toLocalDateKey(rec), time, subject, rev, status: 'attended', note: sd.note || '' });
@@ -1375,7 +1376,7 @@ function renderAnalytics() {
             if (parts[0] !== String(s.id)) return;
             const wkStart = new Date(parts[1] + 'T00:00:00');
             const origDate = new Date(wkStart);
-            origDate.setDate(origDate.getDate() + parseInt(parts[2]));
+            origDate.setDate(origDate.getDate() + 1 + parseInt(parts[2]));
             if (origDate.getMonth() !== month || origDate.getFullYear() !== year) return;
             sRescheduled++;
         });
