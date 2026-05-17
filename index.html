@@ -107,6 +107,7 @@
         .lesson-table tr:last-child td { border-bottom:none; }
         .lesson-table tr.row-attended td { background:#fafff9; }
         .lesson-table tr.row-cancelled td { background:#fff8f8; }
+        .lesson-table tr.row-pending td { background:#f5f8ff; color:#666; }
         .archived-badge { display:inline-block; background:#fff3e0; color:#e65100; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; vertical-align:middle; }
         .archived-card { opacity:0.75; border-color:#ffe0b2 !important; }
     </style>
@@ -1538,6 +1539,34 @@ function renderAnalytics() {
             }
         });
 
+        // Pending sessions — scheduled this month, not yet marked
+        s.schedule.forEach(slot => {
+            const jsDay = slot.day === 6 ? 0 : slot.day + 1;
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(year, month, d);
+                if (date.getDay() !== jsDay) continue;
+                const dk = toLocalDateKey(date);
+                if (s.startDate && dk < s.startDate) continue;
+                if (s.endDate && dk > s.endDate) continue;
+                const mon = getMonday(new Date(date));
+                const wkKey = mon.toISOString().split('T')[0];
+                const key = `${s.id}_${wkKey}_${slot.day}`;
+                if (attendanceRecords[key]) continue; // already in list as attended/cancelled
+                const sd = sessionData[key] || {};
+                // If rescheduled out of this month, skip the original slot here
+                if (sd.rescheduleDate) {
+                    const rd = new Date(sd.rescheduleDate + 'T00:00:00');
+                    if (rd.getMonth() !== month || rd.getFullYear() !== year) continue;
+                }
+                const effectiveDate = sd.rescheduleDate || dk;
+                const subject = sd.subject || slot.subject || s.subject;
+                const time = sd.time || slot.time;
+                const effectiveDuration = sd.duration || s.duration;
+                const rev = effectiveDuration * s.hourlyRate;
+                sessionList.push({ date: effectiveDate, time, subject, rev, status: 'pending' });
+            }
+        });
+
         const sMarked  = sAtt + sCanc;
         const sAttRate = sMarked > 0 ? Math.round((sAtt / sMarked) * 100) : null;
 
@@ -1554,11 +1583,16 @@ function renderAnalytics() {
                     const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
                     const dateStr = `${d.getDate()} ${d.toLocaleString('default',{month:'short'})} ${dayName}`;
                     const subj = l.subject + (l.isOneOff ? ' <span style="color:#1976d2;font-size:10px;">(ad-hoc)</span>' : '');
-                    const amtColor = l.status === 'attended' ? '#388e3c' : '#c62828';
                     const statusBadge = l.status === 'attended'
                         ? `<span style="color:#388e3c;font-weight:600;">✓ Attended</span>`
-                        : `<span style="color:#c62828;font-weight:600;">✗ Cancelled</span>`;
-                    const amt = l.status === 'attended' ? `<span style="color:${amtColor};font-weight:700;">$${l.rev.toFixed(2)}</span>` : `<span style="color:#c62828;text-decoration:line-through;opacity:0.6;">$${l.rev.toFixed(2)}</span>`;
+                        : l.status === 'cancelled'
+                        ? `<span style="color:#c62828;font-weight:600;">✗ Cancelled</span>`
+                        : `<span style="color:#1976d2;opacity:0.7;">⏳ Pending</span>`;
+                    const amt = l.status === 'attended'
+                        ? `<span style="color:#388e3c;font-weight:700;">$${l.rev.toFixed(2)}</span>`
+                        : l.status === 'cancelled'
+                        ? `<span style="color:#c62828;text-decoration:line-through;opacity:0.6;">$${l.rev.toFixed(2)}</span>`
+                        : `<span style="color:#1976d2;opacity:0.5;">$${l.rev.toFixed(2)}</span>`;
                     return `<tr class="row-${l.status}">
                         <td style="color:#bbb;">${i+1}</td>
                         <td style="white-space:nowrap;">${dateStr}</td>
