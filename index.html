@@ -529,10 +529,19 @@ function renderScheduleSelector() {
                 <input type="checkbox" id="day_${i}" onchange="toggleDay(${i})">
                 <span>${day}</span>
             </label>
-            <div id="times_${i}" style="display:none;margin-top:8px;">
-                <select id="time_${i}">
-                    ${TIMES.map(t => `<option value="${t}">${t}</option>`).join('')}
-                </select>
+            <div id="times_${i}" style="display:none;margin-top:8px;display:none;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
+                <div><label style="font-size:11px;color:#999;">Time</label>
+                    <select id="time_${i}" style="width:100%;">${TIMES.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
+                </div>
+                <div><label style="font-size:11px;color:#999;">Subject (optional)</label>
+                    <input type="text" id="subj_${i}" placeholder="Default" style="width:100%;">
+                </div>
+                <div><label style="font-size:11px;color:#999;">Duration (h)</label>
+                    <input type="number" id="dur_${i}" placeholder="Default" min="0.5" step="0.5" style="width:100%;">
+                </div>
+                <div><label style="font-size:11px;color:#999;">Rate ($/hr)</label>
+                    <input type="number" id="rate_${i}" placeholder="Default" min="0" step="0.01" style="width:100%;">
+                </div>
             </div>
         </div>`;
     });
@@ -541,7 +550,7 @@ function renderScheduleSelector() {
 
 window.toggleDay = function(i) {
     const cb = document.getElementById(`day_${i}`);
-    document.getElementById(`times_${i}`).style.display = cb.checked ? 'block' : 'none';
+    document.getElementById(`times_${i}`).style.display = cb.checked ? 'grid' : 'none';
 };
 
 async function ensureStudentCodes() {
@@ -587,11 +596,14 @@ window.addStudent = async function() {
     const schedule = [];
     DAYS.forEach((day, i) => {
         if (document.getElementById(`day_${i}`).checked) {
-            schedule.push({
-                day: i,
-                dayName: day,
-                time: document.getElementById(`time_${i}`).value
-            });
+            const slotSubj = (document.getElementById(`subj_${i}`)?.value || '').trim();
+            const slotDurV = parseFloat(document.getElementById(`dur_${i}`)?.value);
+            const slotRateV = parseFloat(document.getElementById(`rate_${i}`)?.value);
+            const entry = { day: i, dayName: day, time: document.getElementById(`time_${i}`).value };
+            if (slotSubj) entry.subject = slotSubj;
+            if (!isNaN(slotDurV) && slotDurV > 0) entry.duration = slotDurV;
+            if (!isNaN(slotRateV) && slotRateV > 0) entry.hourlyRate = slotRateV;
+            schedule.push(entry);
         }
     });
 
@@ -622,6 +634,10 @@ window.addStudent = async function() {
     }
 };
 
+// Per-slot helpers: slot.duration / slot.hourlyRate override student defaults
+function slotDur(s, slot)  { return (slot && slot.duration)   || s.duration; }
+function slotRate(s, slot) { return (slot && slot.hourlyRate) || s.hourlyRate; }
+
 function calcEndTime(startTime, durationHours) {
     const [h, m] = startTime.split(':').map(Number);
     const totalMins = h * 60 + m + Math.round(durationHours * 60);
@@ -644,10 +660,10 @@ function renderStudents() {
     }
 
     function buildCard(s, isArchived) {
-        const total = (s.schedule.length * s.duration * s.hourlyRate).toFixed(2);
+        const total = (s.schedule.reduce((sum,sl)=>sum+slotDur(s,sl)*slotRate(s,sl),0)).toFixed(2);
         const slots = s.schedule.map(slot => {
             const subj = slot.subject || s.subject;
-            const end = calcEndTime(slot.time, s.duration);
+            const end = calcEndTime(slot.time, slotDur(s,slot));
             if (isArchived) {
                 return `<div class="lesson-slot" style="opacity:0.6;">
                     <div style="font-size:10px;font-weight:700;color:#777;text-align:center;padding:2px 0;">${subj}</div>
@@ -740,20 +756,28 @@ window.editStudent = function(studentId) {
         const slot = s.schedule.find(sl => sl.day === i);
         const checked = slot ? 'checked' : '';
         const selTime = slot ? slot.time : '14:00';
-        const selSubj = slot ? (slot.subject || s.subject) : s.subject;
+        const selSubj = slot ? (slot.subject || '') : '';
+        const selDur  = slot && slot.duration   ? slot.duration   : '';
+        const selRate = slot && slot.hourlyRate  ? slot.hourlyRate : '';
         return `<div style="padding:10px;background:#f9f9f9;border-radius:6px;margin-bottom:8px;">
             <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer;">
-                <input type="checkbox" id="ed_day_${i}" ${checked} onchange="document.getElementById('ed_times_${i}').style.display=this.checked?'block':'none'">
+                <input type="checkbox" id="ed_day_${i}" ${checked} onchange="document.getElementById('ed_times_${i}').style.display=this.checked?'grid':'none'">
                 <span style="font-weight:500;">${day}</span>
             </label>
-            <div id="ed_times_${i}" style="display:${slot?'block':'none'};margin-top:8px;display:${slot?'grid':'none'};grid-template-columns:1fr 1fr;gap:8px;">
+            <div id="ed_times_${i}" style="display:${slot?'grid':'none'};margin-top:8px;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
                 <div><label style="font-size:11px;color:#999;">Time</label>
                     <select id="ed_time_${i}" style="width:100%;">
                         ${TIMES.map(t=>`<option value="${t}"${t===selTime?' selected':''}>${t}</option>`).join('')}
                     </select>
                 </div>
-                <div><label style="font-size:11px;color:#999;">Subject</label>
-                    <input type="text" id="ed_subj_${i}" value="${selSubj}" style="width:100%;">
+                <div><label style="font-size:11px;color:#999;">Subject (optional)</label>
+                    <input type="text" id="ed_subj_${i}" value="${selSubj}" placeholder="Default" style="width:100%;">
+                </div>
+                <div><label style="font-size:11px;color:#999;">Duration (h)</label>
+                    <input type="number" id="ed_dur_${i}" value="${selDur}" placeholder="Default" min="0.5" step="0.5" style="width:100%;">
+                </div>
+                <div><label style="font-size:11px;color:#999;">Rate ($/hr)</label>
+                    <input type="number" id="ed_rate_${i}" value="${selRate}" placeholder="Default" min="0" step="0.01" style="width:100%;">
                 </div>
             </div>
         </div>`;
@@ -784,9 +808,14 @@ window.saveEditStudent = async function(studentId) {
     if (!name || !rate || !dur) { alert('Fill all fields'); return; }
     const schedule = DAYS.reduce((acc, day, i) => {
         if (document.getElementById(`ed_day_${i}`).checked) {
-            acc.push({ day: i, dayName: day,
-                time: document.getElementById(`ed_time_${i}`).value,
-                subject: document.getElementById(`ed_subj_${i}`).value.trim() || name });
+            const slotSubj  = (document.getElementById(`ed_subj_${i}`)?.value || '').trim();
+            const slotDurV  = parseFloat(document.getElementById(`ed_dur_${i}`)?.value);
+            const slotRateV = parseFloat(document.getElementById(`ed_rate_${i}`)?.value);
+            const entry = { day: i, dayName: day, time: document.getElementById(`ed_time_${i}`).value };
+            if (slotSubj) entry.subject = slotSubj;
+            if (!isNaN(slotDurV)  && slotDurV  > 0) entry.duration   = slotDurV;
+            if (!isNaN(slotRateV) && slotRateV > 0) entry.hourlyRate = slotRateV;
+            acc.push(entry);
         }
         return acc;
     }, []);
@@ -852,7 +881,7 @@ function renderCalendar() {
                 subject: slot.subject || s.subject,
                 time: slot.time,
                 duration: effectiveDur,
-                revenue: (effectiveDur * s.hourlyRate).toFixed(2),
+                revenue: (effectiveDur * slotRate(s,slot)).toFixed(2),
                 status: attendanceRecords[key] || null
             });
         });
@@ -994,7 +1023,7 @@ function updateCalendarRevenueSummary() {
                 if (date.getDay() !== jsDay) continue;
                 if (s.startDate && toLocalDateKey(date) < s.startDate) continue;
                 if (s.endDate && toLocalDateKey(date) > s.endDate) continue;
-                projectedMonthly += s.duration * s.hourlyRate;
+                projectedMonthly += slotDur(s,slot) * slotRate(s,slot);
             }
         });
     });
@@ -1020,7 +1049,7 @@ function updateCalendarRevenueSummary() {
         if (!student) return;
         const schedule = student.schedule.find(sc => sc.day === parseInt(dayIdx));
         if (!schedule) return;
-        if (status === 'attended') { revenueToDate += student.duration * student.hourlyRate; attendedCount++; }
+        if (status === 'attended') { revenueToDate += slotDur(student,schedule) * slotRate(student,schedule); attendedCount++; }
         else if (status === 'cancelled') { cancelledCount++; }
     });
 
@@ -1136,13 +1165,13 @@ window.openLessonModal = function(studentId, weekStartKey, dayIndex) {
     lessonDate.setDate(lessonDate.getDate() + dayIndex);
     const origDateKey = lessonDate.toISOString().split('T')[0];
     const sessionDateKey = sd.rescheduleDate || origDateKey;
-    const effectiveDuration = sd.duration || student.duration;
+    const effectiveDuration = sd.duration || slotDur(student, slot);
     const endTime = calcEndTime(sessionTime, effectiveDuration);
     const dateStr = new Date(sessionDateKey + 'T00:00:00').toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-    _lm = { type: 'recurring', key, status, slotTime: slot.time, origDate: origDateKey, origDuration: student.duration };
+    _lm = { type: 'recurring', key, status, slotTime: slot.time, origDate: origDateKey, origDuration: slotDur(student, slot) };
     document.getElementById('lm_title').textContent = student.studentName;
     document.getElementById('lm_body').innerHTML = buildLessonBody({
-        meta: `${dateStr} · ${sessionTime}–${endTime} · $${(effectiveDuration * student.hourlyRate).toFixed(2)}`,
+        meta: `${dateStr} · ${sessionTime}–${endTime} · $${(effectiveDuration * slotRate(student, slot)).toFixed(2)}`,
         status, subject, note, time: sessionTime, date: sessionDateKey, duration: effectiveDuration,
         saveFunc: 'window.saveLessonModal()',
         cancelFunc: 'window.closeLessonModal()'
@@ -1406,7 +1435,7 @@ function renderAnalytics() {
             if (s.startDate && slotDateKey < s.startDate) return;
             if (s.endDate && slotDateKey > s.endDate) return;
             const status = attendanceRecords[key];
-            const rev = (ovr.duration || s.duration) * s.hourlyRate;
+            const rev = (ovr.duration || slotDur(s,slot)) * slotRate(s,slot);
             wkScheduled++;
             wkPotential += rev;
             if (status === 'attended')      { wkAttended++;  wkEarned += rev; }
@@ -1433,14 +1462,14 @@ function renderAnalytics() {
 
     students.forEach(s => {
         s.schedule.forEach(slot => {
-            totalWeekly += s.duration * s.hourlyRate;
+            totalWeekly += slotDur(s,slot) * slotRate(s,slot);
             const jsDay = slot.day === 6 ? 0 : slot.day + 1;
             for (let d = 1; d <= daysInMonth; d++) {
                 const date = new Date(year, month, d);
                 if (date.getDay() !== jsDay) continue;
                 if (s.startDate && toLocalDateKey(date) < s.startDate) continue;
                 if (s.endDate && toLocalDateKey(date) > s.endDate) continue;
-                totalProjected += s.duration * s.hourlyRate;
+                totalProjected += slotDur(s,slot) * slotRate(s,slot);
             }
         });
     });
@@ -1462,7 +1491,7 @@ function renderAnalytics() {
             if (student) {
                 const sch = student.schedule.find(sc => sc.day === parseInt(dayIdx));
                 if (sch) {
-                    const rev = student.duration * student.hourlyRate;
+                    const rev = slotDur(student,sch) * slotRate(student,sch);
                     if (status === 'attended')      { moAttended++;  moEarned += rev; }
                     else if (status === 'cancelled') { moCancelled++; moLost   += rev; }
                 }
@@ -1590,7 +1619,7 @@ function renderAnalytics() {
     html += `<h2 style="margin-top:20px;margin-bottom:12px;">Student Performance — ${monthName} ${year}</h2>`;
 
     students.forEach(s => {
-        const weeklyRev  = s.schedule.length * s.duration * s.hourlyRate;
+        const weeklyRev  = s.schedule.reduce((sum,sl)=>sum+slotDur(s,sl)*slotRate(s,sl),0);
         let monthlyRev = 0;
         s.schedule.forEach(slot => {
             const jsDay = slot.day === 6 ? 0 : slot.day + 1;
@@ -1599,7 +1628,7 @@ function renderAnalytics() {
                 if (date.getDay() !== jsDay) continue;
                 if (s.startDate && toLocalDateKey(date) < s.startDate) continue;
                 if (s.endDate && toLocalDateKey(date) > s.endDate) continue;
-                monthlyRev += s.duration * s.hourlyRate;
+                monthlyRev += slotDur(s,slot) * slotRate(s,slot);
             }
         });
 
@@ -1639,8 +1668,8 @@ function renderAnalytics() {
             if (effDate.getMonth() !== month || effDate.getFullYear() !== year) return;
             const subject = sd.subject || sch.subject || s.subject;
             const time = sd.time || sch.time;
-            const effectiveDuration = sd.duration || s.duration;
-            const rev = effectiveDuration * s.hourlyRate;
+            const effectiveDuration = sd.duration || slotDur(s, sch);
+            const rev = effectiveDuration * slotRate(s, sch);
             if (status === 'attended') {
                 sAtt++; sEarned += rev;
                 sessionList.push({ date: effectiveDateKey, time, subject, rev, status: 'attended', note: sd.note || '', payKey: key });
@@ -1719,8 +1748,8 @@ function renderAnalytics() {
                 const effectiveDate = sd.rescheduleDate || dk;
                 const subject = sd.subject || slot.subject || s.subject;
                 const time = sd.time || slot.time;
-                const effectiveDuration = sd.duration || s.duration;
-                const rev = effectiveDuration * s.hourlyRate;
+                const effectiveDuration = sd.duration || slotDur(s, slot);
+                const rev = effectiveDuration * slotRate(s, slot);
                 sessionList.push({ date: effectiveDate, time, subject, rev, status: 'pending', payKey: key });
             }
         });
@@ -1850,7 +1879,7 @@ window.exportToExcel = function() {
             if (slot) {
                 const key = `${s.id}_${weekStartKey}_${i}`;
                 const status = attendanceRecords[key] || 'pending';
-                rows.push([s.studentName, s.subject, DAYNAMES[i], dayDate.toLocaleDateString(), slot.time, s.duration, s.hourlyRate, (s.duration * s.hourlyRate).toFixed(2), status]);
+                rows.push([s.studentName, slot.subject || s.subject, DAYNAMES[i], dayDate.toLocaleDateString(), slot.time, slotDur(s,slot), slotRate(s,slot), (slotDur(s,slot) * slotRate(s,slot)).toFixed(2), status]);
             }
         });
     }
@@ -1974,8 +2003,8 @@ window.openStudentSearch = function(studentId) {
             const effDateKey = sd.rescheduleDate || toLocalDateKey(rec);
             const effDate = new Date(effDateKey + 'T00:00:00');
             if (effDate.getMonth() !== month || effDate.getFullYear() !== year) return;
-            const dur = sd.duration || s.duration;
-            const rev = dur * s.hourlyRate;
+            const dur = sd.duration || slotDur(s,sch);
+            const rev = dur * slotRate(s,sch);
             if (status === 'attended') { att++; earned += rev; }
             else if (status === 'cancelled') { canc++; }
         });
@@ -2078,8 +2107,8 @@ window.toggleSearchMonth = function(studentId, month, year) {
         if (effDate.getMonth() !== month || effDate.getFullYear() !== year) return;
         const subj = sd.subject || sch.subject || s.subject;
         const time = sd.time || sch.time;
-        const dur = sd.duration || s.duration;
-        const rev = dur * s.hourlyRate;
+        const dur = sd.duration || slotDur(s,sch);
+        const rev = dur * slotRate(s,sch);
         sessionList.push({ date: effDateKey, time, subject: subj, rev, status, payKey: key });
     });
     Object.values(oneOffLessons).forEach(ol => {
@@ -2292,8 +2321,8 @@ window.generateInvoice = function(studentId, month, year) {
         const sch = s.schedule.find(sc => sc.day === parseInt(parts[2]));
         if (!sch) return;
         const sd = sessionData[key] || {};
-        const dur = sd.duration || s.duration;
-        const rev = dur * s.hourlyRate;
+        const dur = sd.duration || slotDur(s,sch);
+        const rev = dur * slotRate(s,sch);
         const paid = !!paymentRecords[key];
         rows.push({ date: toLocalDateKey(rec), time: sd.time || sch.time, subject: sd.subject || sch.subject || s.subject, dur, rev, status, paid });
     });
