@@ -172,11 +172,6 @@
 </div>
 
 <div id="calendar" class="tab-content">
-    <div class="week-nav">
-        <button class="secondary" onclick="window.previousWeek()">← Previous</button>
-        <div class="week-info" id="weekDisplay">Loading...</div>
-        <button class="secondary" onclick="window.nextWeek()">Next →</button>
-    </div>
     <div class="revenue-stats-grid">
         <div class="student-card">
             <div class="stat-label" id="calRevLabel">Revenue to Date</div>
@@ -192,7 +187,12 @@
             <div class="stat-value" id="calendarRevenuePercent">0%</div>
         </div>
     </div>
-    <p style="font-size: 12px; color: #999; text-align: center; margin-bottom: 16px;">Click lesson to mark: <strong style="color:#1976d2">Blue</strong> = Pending · <strong style="color:#388e3c">Green</strong> = Attended · <strong style="color:#c62828">Red</strong> = Cancelled</p>
+    <div class="week-nav" style="margin-bottom:8px;">
+        <button class="secondary" onclick="window.previousWeek()">← Previous</button>
+        <div class="week-info" id="weekDisplay">Loading...</div>
+        <button class="secondary" onclick="window.nextWeek()">Next →</button>
+    </div>
+    <p style="font-size: 12px; color: #999; text-align: center; margin-bottom: 8px;">Click lesson to mark: <strong style="color:#1976d2">Blue</strong> = Pending · <strong style="color:#388e3c">Green</strong> = Attended · <strong style="color:#c62828">Red</strong> = Cancelled</p>
     <div id="calendarGrid"></div>
 </div>
 
@@ -305,6 +305,8 @@ let attendanceRecords = {};
 let sessionData = {};
 let oneOffLessons = {};
 let currentWeekStart = getMonday(new Date());
+let analyticsMonth = new Date().getMonth();
+let analyticsYear = new Date().getFullYear();
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const TIMES = (()=>{const t=[];for(let h=8;h<=23;h++){['00','15','30','45'].forEach(m=>{t.push(`${String(h).padStart(2,'0')}:${m}`);});}t.push('00:00');return t;})();
@@ -1103,6 +1105,12 @@ window.toggleStudentCard = function(id) {
     if (toggle) toggle.classList.toggle('collapsed');
 };
 
+window.setAnalyticsMonth = function(m, y) {
+    analyticsMonth = m;
+    analyticsYear = y;
+    renderAnalytics();
+};
+
 function renderAnalytics() {
     const container = document.getElementById('analyticsList');
     if (students.length === 0) {
@@ -1111,11 +1119,13 @@ function renderAnalytics() {
     }
 
     const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
+    const year = analyticsYear;
+    const month = analyticsMonth;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const dayOfMonth = today.getDate();
-    const monthName = today.toLocaleString('default', { month: 'long' });
+    const isPastMonth = year < today.getFullYear() || (year === today.getFullYear() && month < today.getMonth());
+    const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
+    const dayOfMonth = isCurrentMonth ? today.getDate() : (isPastMonth ? daysInMonth : 0);
+    const monthName = new Date(year, month, 1).toLocaleString('default', { month: 'long' });
 
     const thisWeekStart = getMonday(new Date());
     const thisWeekKey = thisWeekStart.toISOString().split('T')[0];
@@ -1175,7 +1185,7 @@ function renderAnalytics() {
         const sid = parts[0], dateStr = parts[1], dayIdx = parts[2];
         const wkStartR = new Date(dateStr + 'T00:00:00');
         const rec = new Date(wkStartR);
-        rec.setDate(rec.getDate() + parseInt(dayIdx));
+        rec.setDate(rec.getDate() + 1 + parseInt(dayIdx));
         if (rec.getMonth() === month && rec.getFullYear() === year) {
             const student = students.find(s => s.id === parseInt(sid));
             if (student) {
@@ -1229,7 +1239,17 @@ function renderAnalytics() {
         return `<div style="font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:0.8px;margin:16px 0 8px;">${txt}</div>`;
     }
 
-    let html = '';
+    // ── Month tabs ──
+    const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    let html = '<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:20px;padding-bottom:2px;scrollbar-width:thin;">';
+    for (let i = -3; i <= 5; i++) {
+        const td = new Date(today.getFullYear(), today.getMonth() + i, 1);
+        const tm = td.getMonth(), ty = td.getFullYear();
+        const active = tm === analyticsMonth && ty === analyticsYear;
+        const lbl = MONTH_ABBR[tm] + (ty !== today.getFullYear() ? ` '${String(ty).slice(2)}` : '');
+        html += `<button onclick="window.setAnalyticsMonth(${tm},${ty})" style="flex-shrink:0;padding:6px 16px;border-radius:20px;border:1px solid ${active?'#1976d2':'#ddd'};background:${active?'#1976d2':'white'};color:${active?'white':'#555'};font-size:13px;font-weight:${active?700:500};cursor:pointer;">${lbl}</button>`;
+    }
+    html += '</div>';
 
     // ══════════════════════════
     //  THIS WEEK
