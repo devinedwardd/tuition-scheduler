@@ -1046,12 +1046,15 @@ function updateCalendarRevenueSummary() {
         const wkStart = new Date(dateStr + 'T00:00:00');
         const recordDate = new Date(wkStart);
         recordDate.setDate(recordDate.getDate() + 1 + parseInt(dayIdx));
-        if (recordDate.getMonth() !== month || recordDate.getFullYear() !== year) return;
         const student = students.find(s => s.id === parseInt(sid));
         if (!student) return;
         const schedule = student.schedule.find(sc => sc.day === parseInt(dayIdx));
         if (!schedule) return;
-        if (status === 'attended') { revenueToDate += slotDur(student,schedule) * slotRate(student,schedule); attendedCount++; }
+        const sd = sessionData[key] || {};
+        const effectiveDateKey = sd.rescheduleDate || toLocalDateKey(recordDate);
+        const effDate = new Date(effectiveDateKey + 'T00:00:00');
+        if (effDate.getMonth() !== month || effDate.getFullYear() !== year) return;
+        if (status === 'attended') { revenueToDate += (sd.duration || slotDur(student,schedule)) * sdRate(sd, student, schedule); attendedCount++; }
         else if (status === 'cancelled') { cancelledCount++; }
     });
 
@@ -1821,7 +1824,10 @@ function renderAnalytics() {
                     const d = new Date(l.date + 'T00:00:00');
                     const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
                     const dateStr = `${d.getDate()} ${d.toLocaleString('default',{month:'short'})} ${dayName}`;
-                    const subj = l.subject + (l.isOneOff ? ' <span style="color:#C9911A;font-size:10px;">(ad-hoc)</span>' : '');
+                    const safeSubj = (l.subject || '').replace(/"/g, '&quot;');
+                    const subj = l.payKey
+                        ? `<input type="text" value="${safeSubj}" onblur="window.updateAnalyticsSubject('${l.payKey}',this.value,${l.isOneOff?'true':'false'})" style="border:none;background:transparent;width:100%;min-width:80px;padding:0;font:inherit;cursor:text;" title="Click to edit subject">${l.isOneOff ? ' <span style="color:#C9911A;font-size:10px;">(ad-hoc)</span>' : ''}`
+                        : (l.subject || '') + (l.isOneOff ? ' <span style="color:#C9911A;font-size:10px;">(ad-hoc)</span>' : '');
                     const statusBadge = l.status === 'attended'
                         ? `<span style="color:#388e3c;font-weight:600;">✓ Attended</span>`
                         : l.status === 'cancelled'
@@ -2322,6 +2328,23 @@ window.saveBrandSettings = async function() {
     try {
         await db.collection('users').doc(activeUid).collection('brand').doc('settings').set(updated);
         alert('Brand settings saved!');
+    } catch(e) { alert('Error: ' + e.message); }
+};
+
+window.updateAnalyticsSubject = async function(payKey, newSubject, isOneOff) {
+    newSubject = (newSubject || '').trim();
+    if (!newSubject) return;
+    try {
+        if (isOneOff) {
+            const id = payKey.replace('oneoff_', '');
+            if (!oneOffLessons[id]) return;
+            const updated = { ...oneOffLessons, [id]: { ...oneOffLessons[id], subject: newSubject } };
+            await db.collection('users').doc(activeUid).collection('one_off').doc('lessons').set({ lessons: updated });
+        } else {
+            const existing = sessionData[payKey] || {};
+            const updSd = { ...sessionData, [payKey]: { ...existing, subject: newSubject } };
+            await db.collection('users').doc(activeUid).collection('session_data').doc('overrides').set({ data: updSd });
+        }
     } catch(e) { alert('Error: ' + e.message); }
 };
 
