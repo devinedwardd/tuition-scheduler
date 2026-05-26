@@ -1100,6 +1100,29 @@ window.toggleAttendance = async function(studentId, weekStartStr, dayIndex) {
     }
 };
 
+window.cycleStatusFromAnalytics = async function(payKey, currentStatus) {
+    if (!payKey || !activeUid) return;
+    if (payKey.startsWith('oneoff_')) {
+        const id = payKey.replace('oneoff_', '');
+        const ol = oneOffLessons[id];
+        if (!ol) return;
+        const next = currentStatus === 'attended' ? 'cancelled' : currentStatus === 'cancelled' ? null : 'attended';
+        const updated = { ...oneOffLessons, [id]: { ...ol, status: next } };
+        try {
+            await db.collection('users').doc(activeUid).collection('one_off').doc('lessons').set({ lessons: updated });
+        } catch(e) { alert('Error: ' + e.message); }
+    } else {
+        const current = attendanceRecords[payKey];
+        const updated = { ...attendanceRecords };
+        if (!current) updated[payKey] = 'attended';
+        else if (current === 'attended') updated[payKey] = 'cancelled';
+        else delete updated[payKey];
+        try {
+            await db.collection('users').doc(activeUid).collection('attendance').doc('records').set({ records: updated });
+        } catch(e) { alert('Error: ' + e.message); }
+    }
+};
+
 window.previousWeek = function() {
     currentWeekStart.setDate(currentWeekStart.getDate() - 7);
     renderCalendar();
@@ -1815,7 +1838,7 @@ function renderAnalytics() {
         // Sort sessions by date
         sessionList.sort((a, b) => a.date > b.date ? 1 : a.date < b.date ? -1 : 0);
         const lessonListHtml = sessionList.length > 0
-            ? `<table class="lesson-table">
+            ? `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table class="lesson-table">
                 <thead><tr>
                     <th>#</th><th>Date</th><th>Time</th><th>Subject</th><th>Amount</th><th>Status</th><th style="text-align:center;">Paid</th>
                 </tr></thead>
@@ -1828,11 +1851,17 @@ function renderAnalytics() {
                     const subj = l.payKey
                         ? `<input type="text" value="${safeSubj}" onblur="window.updateAnalyticsSubject('${l.payKey}',this.value,${l.isOneOff?'true':'false'})" style="border:none;background:transparent;width:100%;min-width:80px;padding:0;font:inherit;cursor:text;" title="Click to edit subject">${l.isOneOff ? ' <span style="color:#C9911A;font-size:10px;">(ad-hoc)</span>' : ''}`
                         : (l.subject || '') + (l.isOneOff ? ' <span style="color:#C9911A;font-size:10px;">(ad-hoc)</span>' : '');
-                    const statusBadge = l.status === 'attended'
-                        ? `<span style="color:#388e3c;font-weight:600;">✓ Attended</span>`
-                        : l.status === 'cancelled'
-                        ? `<span style="color:#c62828;font-weight:600;">✗ Cancelled</span>`
-                        : `<span style="color:#C9911A;opacity:0.7;">⏳ Pending</span>`;
+                    const statusBadge = l.payKey
+                        ? (l.status === 'attended'
+                            ? `<button onclick="window.cycleStatusFromAnalytics('${l.payKey}','attended')" style="background:none;border:none;cursor:pointer;padding:2px 4px;font-size:11px;color:#388e3c;font-weight:600;" title="Tap to cancel">✓ Attended</button>`
+                            : l.status === 'cancelled'
+                            ? `<button onclick="window.cycleStatusFromAnalytics('${l.payKey}','cancelled')" style="background:none;border:none;cursor:pointer;padding:2px 4px;font-size:11px;color:#c62828;font-weight:600;" title="Tap to clear">✗ Cancelled</button>`
+                            : `<button onclick="window.cycleStatusFromAnalytics('${l.payKey}','pending')" style="background:none;border:none;cursor:pointer;padding:2px 4px;font-size:11px;color:#C9911A;opacity:0.8;" title="Tap to mark attended">⏳ Pending</button>`)
+                        : (l.status === 'attended'
+                            ? `<span style="color:#388e3c;font-weight:600;">✓ Attended</span>`
+                            : l.status === 'cancelled'
+                            ? `<span style="color:#c62828;font-weight:600;">✗ Cancelled</span>`
+                            : `<span style="color:#C9911A;opacity:0.7;">⏳ Pending</span>`);
                     const amt = l.status === 'attended'
                         ? `<span style="color:#388e3c;font-weight:700;">$${l.rev.toFixed(2)}</span>`
                         : l.status === 'cancelled'
@@ -1853,7 +1882,7 @@ function renderAnalytics() {
                     </tr>`;
                 }).join('')}
                 </tbody>
-               </table>`
+               </table></div>`
             : `<div style="font-size:11px;color:#aaa;margin-top:6px;font-style:italic;">No sessions recorded yet — mark sessions in the calendar.</div>`;
 
         const archiveDateStr = s.endDate ? new Date(s.endDate + 'T00:00:00').toLocaleDateString('en-SG',{day:'numeric',month:'short',year:'numeric'}) : '';
