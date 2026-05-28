@@ -1771,6 +1771,8 @@ function renderAnalytics() {
             } else if (ol.status === 'cancelled') {
                 sCanc++; sLost += rev;
                 sessionList.push({ date: ol.dateKey, time: ol.time, subject: ol.subject, rev, status: 'cancelled', note: ol.note || '', isOneOff: true, payKey });
+            } else {
+                sessionList.push({ date: ol.dateKey, time: ol.time, subject: ol.subject, rev, status: 'pending', note: ol.note || '', isOneOff: true, payKey });
             }
         });
         // Rescheduled sessions this month
